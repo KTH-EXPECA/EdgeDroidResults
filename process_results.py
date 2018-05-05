@@ -254,9 +254,9 @@ def split_tcpdump(client_idx, tcpdump):
 
 
 if __name__ == '__main__':
-    os.chdir('./5Clients_IdealBenchmark')
-    #split_tcpdump(0, 'tcp.pcap')
-    for i in range(5):
+    os.chdir('./10Clients_IdealBenchmark')
+    for i in range(10):
+        #split_tcpdump(i, 'tcp.pcap')
         data = parse_client_stats(i)
         plot_rtts(data)
         plot_avg_times(data)
