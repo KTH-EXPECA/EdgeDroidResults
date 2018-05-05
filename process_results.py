@@ -93,7 +93,10 @@ def plot_rtts(data):
 
     plt.title('Client {}'.format(data['client_id']))
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    plt.show()
+    plt.savefig(
+        'client_{}_rtts_.png'.format(data['client_id']),
+        bbox_inches='tight'
+    )
 
 
 def plot_avg_times(data):
@@ -162,7 +165,10 @@ def plot_avg_times(data):
     ax.set_ylabel('Time [ms]')
     plt.title('Client {}'.format(data['client_id']))
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    plt.show()
+    plt.savefig(
+        'client_{}_avgtimes_.png'.format(data['client_id']),
+        bbox_inches='tight'
+    )
 
 
 def plot_task_times(data):
@@ -205,7 +211,10 @@ def plot_cpu_load():
 
     ax.set_xlabel('Time [m]')
     ax.set_ylabel('Load [%]')
-    plt.show()
+    plt.savefig(
+        'cpu_load.png',
+        bbox_inches='tight'
+    )
 
 
 def plot_ram_usage():
@@ -223,7 +232,10 @@ def plot_ram_usage():
     ax.set_xlabel('Time [m]')
     ax.set_ylabel('Memory [GiB]')
     plt.legend()
-    plt.show()
+    plt.savefig(
+        'ram_usage.png'.format(data['client_id']),
+        bbox_inches='tight'
+    )
 
 
 def split_tcpdump(client_idx, tcpdump):
@@ -243,6 +255,7 @@ def split_tcpdump(client_idx, tcpdump):
 
 if __name__ == '__main__':
     os.chdir('./5Clients_IdealBenchmark')
+    #split_tcpdump(0, 'tcp.pcap')
     for i in range(5):
         data = parse_client_stats(i)
         plot_rtts(data)
