@@ -6,7 +6,7 @@ import pandas as pd
 import psutil
 from scapy.all import *
 
-from results.lego_timing import LEGOTCPdumpParser
+from lego_timing import LEGOTCPdumpParser
 
 Frame = namedtuple('Frame', ['id', 'rtt', 'uplink',
                              'downlink', 'processing',
@@ -242,6 +242,7 @@ def split_tcpdump(client_idx, tcpdump):
 
 
 if __name__ == '__main__':
+    os.chdir('./5Clients_IdealBenchmark')
     for i in range(5):
         data = parse_client_stats(i)
         plot_rtts(data)

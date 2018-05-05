@@ -1,0 +1,6 @@
+scapy
+matplotlib
+numpy
+scipy
+pandas
+psutil
