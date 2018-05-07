@@ -14,6 +14,20 @@ Frame = namedtuple('Frame', ['id', 'rtt', 'uplink',
                              'server_send', 'server_recv'])
 
 
+def autolabel(ax, rects):
+    """
+    Attach a text label above each bar displaying its height
+    """
+    for rect in rects:
+        height = rect.get_height()
+        x_pos = rect.get_x() + rect.get_width() / 2.0
+        y_pos = 0.5 * height + rect.get_y() if height >= 5.0 else \
+            rect.get_y()
+        ax.text(x_pos, y_pos,
+                '{:02.2f}'.format(height),
+                ha='center', va='bottom', weight='bold')
+
+
 def load_results(client_idx):
     filename = '{:02}_stats.json'.format(client_idx)
     with open(filename, 'r') as f:
@@ -30,8 +44,21 @@ def parse_client_stats(client_idx):
     server_in = parser.extract_incoming_timestamps(video_port)
     server_out = parser.extract_outgoing_timestamps(result_port)
 
+    total_avg_up = 0
+    total_avg_down = 0
+    total_avg_proc = 0
+    total_count_up = 0
+    total_count_down = 0
+    total_count_proc = 0
+
     for run_idx, run in enumerate(data['runs']):
         run_frames = []
+        avg_up = 0
+        count_up = 0
+        avg_down = 0
+        count_down = 0
+        avg_proc = 0
+        count_proc = 0
         for frame in run['frames']:
             frame_id = frame['frame_id']
             client_send = frame['sent']
@@ -50,18 +77,57 @@ def parse_client_stats(client_idx):
                                         downlink, processing,
                                         client_send, client_recv,
                                         server_send, server_recv))
+
+                if uplink >= 0:
+                    avg_up += uplink
+                    count_up += 1
+
+                if downlink >= 0:
+                    avg_down += downlink
+                    count_down += 1
+
+                avg_proc += processing
+                count_proc += 1
             except AssertionError as e:
                 print('Recv', server_recv)
                 print('Send', server_send)
                 print('Proc', processing)
                 print('Run', run_idx)
-                print('Frame {} of {}', frame_id, len(run['frames']))
+                print('Frame {} of {}'.format(frame_id, len(run['frames'])))
                 run_frames.append(Frame(frame_id, rtt, None, None, None,
                                         client_send, client_recv,
                                         server_send, server_recv))
 
         run_frames.sort(key=operator.attrgetter('id'))
+
+        total_avg_up += avg_up
+        total_avg_down += avg_down
+        total_avg_proc += avg_proc
+
+        total_count_up += count_up
+        total_count_down += count_down
+        total_count_proc += count_proc
+
+        avg_up = avg_up / float(count_up)
+        avg_down = avg_down / float(count_down)
+        avg_proc = avg_proc / float(count_proc)
+
         data['runs'][run_idx]['frames'] = run_frames
+        data['runs'][run_idx]['avg_up'] = avg_up
+        data['runs'][run_idx]['avg_down'] = avg_down
+        data['runs'][run_idx]['avg_proc'] = avg_proc
+
+    total_avg_up = total_avg_up / float(total_count_up)
+    total_avg_down = total_avg_down / float(total_count_down)
+    total_avg_proc = total_avg_proc / float(total_count_proc)
+
+    data['avg_up'] = total_avg_up
+    data['avg_down'] = total_avg_down
+    data['avg_proc'] = total_avg_proc
+
+    data['count_up'] = total_count_up
+    data['count_down'] = total_count_down
+    data['count_proc'] = total_count_proc
 
     return data
 
@@ -93,64 +159,23 @@ def plot_rtts(data):
 
     plt.title('Client {}'.format(data['client_id']))
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    plt.savefig(
-        'client_{}_rtts_.png'.format(data['client_id']),
-        bbox_inches='tight'
-    )
+    # plt.savefig(
+    #     'client_{}_rtts_.png'.format(data['client_id']),
+    #     bbox_inches='tight'
+    # )
+    plt.show()
 
 
 def plot_avg_times(data):
-    frames = [run['frames'] for run in data['runs']]
-    fig, ax = plt.subplots()
-
-    def autolabel(rects):
-        """
-        Attach a text label above each bar displaying its height
-        """
-        for rect in rects:
-            height = rect.get_height()
-            x_pos = rect.get_x() + rect.get_width() / 2.0
-            y_pos = 0.5 * height + rect.get_y() if height >= 5.0 else \
-                rect.get_y()
-            ax.text(x_pos, y_pos,
-                    '{:02.2f}'.format(height),
-                    ha='center', va='bottom', weight='bold')
-
-    results = []
-    x = []
-    for i, run in enumerate(frames):
-        avg_up = 0
-        count_up = 0
-        avg_down = 0
-        count_down = 0
-        avg_proc = 0
-        count_proc = 0
-        for frame in run:
-            up = frame.uplink
-            down = frame.downlink
-
-            if up and up > 0:
-                avg_up += up
-                count_up += 1
-
-            if down and down > 0:
-                avg_down += down
-                count_down += 1
-
-            if frame.processing:
-                avg_proc += frame.processing
-                count_proc += 1
-
-        avg_up = avg_up / (1.0 * count_up)
-        avg_down = avg_down / (1.0 * count_down)
-        avg_proc = avg_proc / (1.0 * count_proc)
-
-        results.append((avg_up, avg_down, avg_proc))
-        x.append('Run {}'.format(i + 1))
+    results = [(r['avg_up'], r['avg_down'], r['avg_proc'])
+               for r in data['runs']]
+    x = ['Run {}'.format(i) for i in range(len(data['runs']))]
 
     up = [y[0] for y in results]
     down = [y[1] for y in results]
     proc = [y[2] for y in results]
+
+    fig, ax = plt.subplots()
 
     rects1 = ax.bar(x, up, label='Avg uplink time')
     rects2 = ax.bar(x, proc, bottom=up, label='Avg processing time')
@@ -158,17 +183,18 @@ def plot_avg_times(data):
                     bottom=[x + y for x, y in zip(up, proc)],
                     label='Avg downlink time')
 
-    autolabel(rects1)
-    autolabel(rects2)
-    autolabel(rects3)
+    autolabel(ax, rects1)
+    autolabel(ax, rects2)
+    autolabel(ax, rects3)
 
     ax.set_ylabel('Time [ms]')
     plt.title('Client {}'.format(data['client_id']))
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    plt.savefig(
-        'client_{}_avgtimes_.png'.format(data['client_id']),
-        bbox_inches='tight'
-    )
+    # plt.savefig(
+    #     'client_{}_avgtimes_.png'.format(data['client_id']),
+    #     bbox_inches='tight'
+    # )
+    plt.show()
 
 
 def plot_task_times(data):
@@ -211,10 +237,12 @@ def plot_cpu_load():
 
     ax.set_xlabel('Time [m]')
     ax.set_ylabel('Load [%]')
-    plt.savefig(
-        'cpu_load.png',
-        bbox_inches='tight'
-    )
+    # plt.savefig(
+    #     'cpu_load.png',
+    #     bbox_inches='tight'
+    # )
+
+    plt.show()
 
 
 def plot_ram_usage():
@@ -232,10 +260,11 @@ def plot_ram_usage():
     ax.set_xlabel('Time [m]')
     ax.set_ylabel('Memory [GiB]')
     plt.legend()
-    plt.savefig(
-        'ram_usage.png'.format(data['client_id']),
-        bbox_inches='tight'
-    )
+    # plt.savefig(
+    #     'ram_usage.png'.format(data['client_id']),
+    #     bbox_inches='tight'
+    # )
+    plt.show()
 
 
 def split_tcpdump(client_idx, tcpdump):
@@ -256,10 +285,10 @@ def split_tcpdump(client_idx, tcpdump):
 if __name__ == '__main__':
     os.chdir('./10Clients_IdealBenchmark')
     for i in range(10):
-        #split_tcpdump(i, 'tcp.pcap')
+        # split_tcpdump(i, 'tcp.pcap')
         data = parse_client_stats(i)
         plot_rtts(data)
         plot_avg_times(data)
-        #plot_task_times_from_frames(data)
+        # plot_task_times_from_frames(data)
     plot_ram_usage()
     plot_cpu_load()
