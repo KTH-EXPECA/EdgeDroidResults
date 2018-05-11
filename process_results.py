@@ -35,8 +35,8 @@ def parse_all_clients_for_run(num_clients, run_idx):
     run_start = server_stats['run_start']
     run_end = server_stats['run_end']
 
-    start_cutoff = num_clients * STAGGER_INTERVAL + run_start
-    end_cutoff = run_end - num_clients * STAGGER_INTERVAL
+    start_cutoff = num_clients * STAGGER_INTERVAL * 1000.0 + run_start
+    end_cutoff = run_end - num_clients * STAGGER_INTERVAL * 1000.0
 
     clients = dict()
     for i in range(num_clients):
