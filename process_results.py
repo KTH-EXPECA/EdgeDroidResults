@@ -129,10 +129,23 @@ def _parse_client_stats_for_run(client_idx, parser,
     return data
 
 
-def load_system_stats_for_run(run_idx):
+def load_system_stats_for_run(run_idx, num_clients):
     os.chdir('run_{}'.format(run_idx + 1))
     df = pd.read_csv('system_stats.csv')
+
+    with open('server_stats.json', 'r') as f:
+        server_stats = json.load(f)
+
+    run_start = server_stats['run_start']
+    run_end = server_stats['run_end']
+
+    start_cutoff = num_clients * STAGGER_INTERVAL * 1000.0 + run_start
+    end_cutoff = run_end - num_clients * STAGGER_INTERVAL * 1000.0
+
     df['run'] = run_idx
+    df['run_start_cutoff'] = start_cutoff
+    df['run_end_cutoff'] = end_cutoff
+
     os.chdir('..')
 
     return df
@@ -143,25 +156,28 @@ def load_system_stats_for_run(run_idx):
                 type=click.Path(dir_okay=True, file_okay=False, exists=True))
 @click.argument('n_clients', type=int)
 @click.argument('n_runs', type=int)
-def prepare_client_stats(experiment_id, n_clients, n_runs):
+@click.option('--only_system_stats', type=bool, default=False,
+              help='Only prepare system stats.')
+def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
     os.chdir(experiment_id)
     runs = dict()
     system_stats = pd.DataFrame()
     for run_idx in range(n_runs):
-        clients = parse_all_clients_for_run(n_clients, run_idx)
-        runs['run_{}'.format(run_idx)] = clients
+        if not only_system_stats:
+            clients = parse_all_clients_for_run(n_clients, run_idx)
+            runs['run_{}'.format(run_idx)] = clients
 
-        system = load_system_stats_for_run(run_idx)
+        system = load_system_stats_for_run(run_idx, n_clients)
         if system_stats.empty:
             system_stats = system
         else:
             system_stats = pd.concat([system_stats, system], ignore_index=True)
 
-    with open('total_stats.json', 'w') as f:
-        json.dump(runs, f)
+    if not only_system_stats:
+        with open('total_stats.json', 'w') as f:
+            json.dump(runs, f)
 
     system_stats.to_csv('total_system_stats.csv')
-
     os.chdir('..')
 
 
