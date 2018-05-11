@@ -1,7 +1,7 @@
 {
-  "experiment_id": "LEGOHead_BaseBenchmark",
+  "experiment_id": "LEGOHead_TestBenchmark",
   "clients": 1,
-  "runs": 5,
+  "runs": 2,
   "steps": 7,
   "trace_root_url": "https://github.com/molguin92/CognitiveAssistanceTraces/releases/download/LEGOVideo2/",
   "ntp_server": "130.237.72.211",
