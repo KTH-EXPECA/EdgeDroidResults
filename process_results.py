@@ -10,6 +10,8 @@ import click
 
 from lego_timing import LEGOTCPdumpParser
 
+STAGGER_INTERVAL = 1.0
+
 Frame = namedtuple('Frame', ['id', 'rtt', 'uplink',
                              'downlink', 'processing',
                              'client_send', 'client_recv',
@@ -25,22 +27,32 @@ def load_results(client_idx):
 def parse_all_clients_for_run(num_clients, run_idx):
     os.chdir('run_{}'.format(run_idx + 1))
     parser = LEGOTCPdumpParser('tcp.pcap')
+    with open('server_stats.json', 'r') as f:
+        server_stats = json.load(f)
+
+    # client_ntp_offset = data['run_results']['ntp_offset']
+    server_ntp_offset = server_stats['server_offset']
+    run_start = server_stats['run_start']
+    run_end = server_stats['run_end']
+
+    start_cutoff = num_clients * STAGGER_INTERVAL + run_start
+    end_cutoff = run_end - num_clients * STAGGER_INTERVAL
 
     clients = dict()
     for i in range(num_clients):
-        clients['client_{}'.format(i)] = _parse_client_stats_for_run(i, parser)
+        clients['client_{}'.format(i)] = \
+            _parse_client_stats_for_run(i, parser, start_cutoff,
+                                        end_cutoff, server_ntp_offset)
 
     os.chdir('..')
     return clients
 
 
-def _parse_client_stats_for_run(client_idx, parser):
+def _parse_client_stats_for_run(client_idx, parser,
+                                start_cutoff, end_cutoff, server_offset):
     data = load_results(client_idx)
     video_port = data['ports']['video']
     result_port = data['ports']['result']
-
-    # client_ntp_offset = data['run_results']['ntp_offset']
-    server_ntp_offset = data['server_offset']
 
     # parser = LEGOTCPdumpParser('{:02}_dump.pcap'.format(client_idx))
 
@@ -59,8 +71,8 @@ def _parse_client_stats_for_run(client_idx, parser):
         try:
             frame_id = frame['frame_id']
             client_send = frame['sent']
-            server_recv = server_in[frame_id].pop(0) + server_ntp_offset
-            server_send = server_out[frame_id].pop(0) + server_ntp_offset
+            server_recv = server_in[frame_id].pop(0) + server_offset
+            server_send = server_out[frame_id].pop(0) + server_offset
             client_recv = frame['recv']
         except KeyError as e:
             print(e)
@@ -68,6 +80,9 @@ def _parse_client_stats_for_run(client_idx, parser):
             print('Client: ', client_idx)
             print('Ports: ', {'video': video_port, 'result': result_port})
             raise e
+
+        if client_send < start_cutoff or client_recv > end_cutoff:
+            continue
 
         uplink = server_recv - client_send
         processing = server_send - server_recv
