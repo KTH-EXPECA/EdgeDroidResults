@@ -84,6 +84,11 @@ def plot_avg_times(avg_times: List[AvgTimes],
     plt.show()
 
 
+def plot_cpu_load(experiment_df: List[pd.DataFrame]) -> None:
+    pass
+
+
+
 def load_data_for_experiment(experiment_id) -> Dict:
     os.chdir(experiment_id)
     with open('total_stats.json', 'r') as f:
