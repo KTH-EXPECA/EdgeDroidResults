@@ -84,9 +84,29 @@ def plot_avg_times(avg_times: List[AvgTimes],
     plt.show()
 
 
-def plot_cpu_load(experiment_df: List[pd.DataFrame]) -> None:
-    pass
+def plot_cpu_loads(cpu_loads: List[float],
+                   experiment_names: List[str]) -> None:
+    assert len(cpu_loads) == len(experiment_names)
 
+    fig, ax = plt.subplots()
+    rect = ax.bar(experiment_names, cpu_loads, label='Average CPU load')
+    autolabel(ax, rect)
+
+    ax.set_ylabel('Load [%]')
+    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    plt.show()
+
+
+def get_avg_cpu_load_for_experiment(experiment_df: pd.DataFrame) -> float:
+    count = 0
+    total_sum = 0
+
+    for _, row in experiment_df.iterrows():
+        if row['run_start_cutoff'] < row['timestamp'] < row['run_end_cutoff']:
+            count += 1
+            total_sum += row['cpu_load']
+
+    return total_sum / (1.0 * count)
 
 
 def load_data_for_experiment(experiment_id) -> Dict:
@@ -96,13 +116,26 @@ def load_data_for_experiment(experiment_id) -> Dict:
         return json.load(f)
 
 
+def load_system_data_for_experiment(experiment_id) -> pd.DataFrame:
+    os.chdir(experiment_id)
+    df = pd.read_csv('total_system_stats.csv')
+    os.chdir('..')
+    return df
+
+
 if __name__ == '__main__':
     experiments = {
-        '1 Client': '1Client_IdealBenchmark',
-        '5 Clients': '5Clients_IdealBenchmark',
+        '1 Client'  : '1Client_IdealBenchmark',
+        '5 Clients' : '5Clients_IdealBenchmark',
         '10 Clients': '10Clients_IdealBenchmark'
     }
 
     exp_data = [load_data_for_experiment(x) for x in experiments.values()]
+    system_data = [load_system_data_for_experiment(x)
+                   for x in experiments.values()]
+
     avg_times = [get_avg_times(data) for data in exp_data]
+    cpu_loads = [get_avg_cpu_load_for_experiment(x) for x in system_data]
+
     plot_avg_times(avg_times, list(experiments.keys()))
+    plot_cpu_loads(cpu_loads, list(experiments.keys()))
