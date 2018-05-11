@@ -160,3 +160,6 @@ fabric.properties
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# only version the final processed results
+run_*
