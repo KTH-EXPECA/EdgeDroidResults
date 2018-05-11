@@ -5,7 +5,7 @@ from collections import namedtuple
 
 import pandas as pd
 from scapy.all import *
-
+from statistics import mean, stdev
 import click
 
 from lego_timing import LEGOTCPdumpParser
@@ -60,12 +60,9 @@ def _parse_client_stats_for_run(client_idx, parser,
     server_out = parser.extract_outgoing_timestamps(result_port)
 
     frames = []
-    avg_up = 0
-    count_up = 0
-    avg_down = 0
-    count_down = 0
-    avg_proc = 0
-    count_proc = 0
+    up = []
+    down = []
+    proc = []
 
     for frame in data['run_results']['frames']:
         try:
@@ -97,15 +94,12 @@ def _parse_client_stats_for_run(client_idx, parser,
                                 server_send, server_recv)._asdict())
 
             if uplink >= 0:
-                avg_up += uplink
-                count_up += 1
+                up.append(uplink)
 
             if downlink >= 0:
-                avg_down += downlink
-                count_down += 1
+                down.append(downlink)
 
-            avg_proc += processing
-            count_proc += 1
+            proc.append(processing)
         except AssertionError as e:
             frames.append(Frame(frame_id, rtt, None, None, None,
                                 client_send, client_recv,
@@ -113,18 +107,18 @@ def _parse_client_stats_for_run(client_idx, parser,
 
     frames.sort(key=lambda x: x['id'])
 
-    avg_up = avg_up / float(count_up)
-    avg_down = avg_down / float(count_down)
-    avg_proc = avg_proc / float(count_proc)
-
     data['run_results']['frames'] = frames
-    data['run_results']['avg_up'] = avg_up
-    data['run_results']['avg_down'] = avg_down
-    data['run_results']['avg_proc'] = avg_proc
+    data['run_results']['avg_up'] = mean(up)
+    data['run_results']['avg_down'] = mean(down)
+    data['run_results']['avg_proc'] = mean(proc)
 
-    data['run_results']['count_up'] = count_up
-    data['run_results']['count_down'] = count_down
-    data['run_results']['count_proc'] = count_proc
+    data['run_results']['std_up'] = stdev(up)
+    data['run_results']['std_down'] = stdev(down)
+    data['run_results']['std_proc'] = stdev(proc)
+
+    data['run_results']['count_up'] = len(up)
+    data['run_results']['count_down'] = len(down)
+    data['run_results']['count_proc'] = len(proc)
 
     return data
 
