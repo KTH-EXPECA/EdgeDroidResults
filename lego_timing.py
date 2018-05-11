@@ -13,8 +13,7 @@ class LEGOTCPdumpParser():
     def __init__(self, pcapf):
         self.pkts = rdpcap(pcapf)
 
-    def extract_incoming_timestamps(self, dport: int) -> Dict[int,
-                                                              list]:
+    def extract_incoming_timestamps(self, dport: int) -> Dict[int, list]:
         # pkts = rdpcap(pcapf)
         processed_frames = dict()
         pkts = [pkt for pkt in self.pkts if
@@ -80,6 +79,6 @@ class LEGOTCPdumpParser():
 
 
 if __name__ == '__main__':
-    parser = LEGOTCPdumpParser('tcp.pcap')
-    print(parser.extract_incoming_timestamps(8098))
-    print(parser.extract_outgoing_timestamps(8111))
+    parser = LEGOTCPdumpParser('1Client_TestBenchmark/run_1/tcp.pcap')
+    print(parser.extract_incoming_timestamps(8999))
+    print(parser.extract_outgoing_timestamps(8988))

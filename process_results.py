@@ -1,10 +1,13 @@
+#!/usr/bin/env python3
+
 import json
-import operator
 from collections import namedtuple
 
 import pandas as pd
 import psutil
 from scapy.all import *
+
+import click
 
 from lego_timing import LEGOTCPdumpParser
 
@@ -33,101 +36,86 @@ def load_results(client_idx):
     with open(filename, 'r') as f:
         return json.load(f, encoding='utf-8')
 
+def parse_all_clients_for_run(num_clients, run_idx):
+    os.chdir('run_{}'.format(run_idx + 1))
+    parser = LEGOTCPdumpParser('tcp.pcap')
 
-def parse_client_stats(client_idx):
+    clients = dict()
+    for i in range(num_clients):
+        clients['client_{}'.format(i)] = _parse_client_stats_for_run(i, parser)
+
+    os.chdir('..')
+    return clients
+
+def _parse_client_stats_for_run(client_idx, parser):
     data = load_results(client_idx)
     video_port = data['ports']['video']
     result_port = data['ports']['result']
 
-    parser = LEGOTCPdumpParser('{:02}_dump.pcap'.format(client_idx))
+    # client_ntp_offset = data['run_results']['ntp_offset']
+    server_ntp_offset = data['server_offset']
+
+    # parser = LEGOTCPdumpParser('{:02}_dump.pcap'.format(client_idx))
 
     server_in = parser.extract_incoming_timestamps(video_port)
     server_out = parser.extract_outgoing_timestamps(result_port)
 
-    total_avg_up = 0
-    total_avg_down = 0
-    total_avg_proc = 0
-    total_count_up = 0
-    total_count_down = 0
-    total_count_proc = 0
+    frames = []
+    avg_up = 0
+    count_up = 0
+    avg_down = 0
+    count_down = 0
+    avg_proc = 0
+    count_proc = 0
 
-    for run_idx, run in enumerate(data['runs']):
-        run_frames = []
-        avg_up = 0
-        count_up = 0
-        avg_down = 0
-        count_down = 0
-        avg_proc = 0
-        count_proc = 0
-        for frame in run['frames']:
-            frame_id = frame['frame_id']
-            client_send = frame['sent']
-            server_recv = server_in[frame_id].pop(0)
-            server_send = server_out[frame_id].pop(0)
-            client_recv = frame['recv']
+    for frame in data['run_results']['frames']:
+        frame_id = frame['frame_id']
+        client_send = frame['sent']
+        server_recv = server_in[frame_id].pop(0) + server_ntp_offset
+        server_send = server_out[frame_id].pop(0) + server_ntp_offset
+        client_recv = frame['recv']
 
-            uplink = server_recv - client_send
-            processing = server_send - server_recv
-            downlink = client_recv - server_send
-            rtt = client_recv - client_send
+        uplink = server_recv - client_send
+        processing = server_send - server_recv
+        downlink = client_recv - server_send
+        rtt = client_recv - client_send
 
-            try:
-                assert processing > 0
-                run_frames.append(Frame(frame_id, rtt, uplink,
-                                        downlink, processing,
-                                        client_send, client_recv,
-                                        server_send, server_recv))
+        try:
+            assert processing > 0
+            frames.append(Frame(frame_id, rtt, uplink,
+                                downlink, processing,
+                                client_send, client_recv,
+                                server_send, server_recv)._asdict())
 
-                if uplink >= 0:
-                    avg_up += uplink
-                    count_up += 1
+            if uplink >= 0:
+                avg_up += uplink
+                count_up += 1
 
-                if downlink >= 0:
-                    avg_down += downlink
-                    count_down += 1
+            if downlink >= 0:
+                avg_down += downlink
+                count_down += 1
 
-                avg_proc += processing
-                count_proc += 1
-            except AssertionError as e:
-                print('Recv', server_recv)
-                print('Send', server_send)
-                print('Proc', processing)
-                print('Run', run_idx)
-                print('Frame {} of {}'.format(frame_id, len(run['frames'])))
-                run_frames.append(Frame(frame_id, rtt, None, None, None,
-                                        client_send, client_recv,
-                                        server_send, server_recv))
+            avg_proc += processing
+            count_proc += 1
+        except AssertionError as e:
+            frames.append(Frame(frame_id, rtt, None, None, None,
+                                client_send, client_recv,
+                                server_send, server_recv))
 
-        run_frames.sort(key=operator.attrgetter('id'))
+    frames.sort(key=lambda x: x['id'])
 
-        total_avg_up += avg_up
-        total_avg_down += avg_down
-        total_avg_proc += avg_proc
+    avg_up = avg_up / float(count_up)
+    avg_down = avg_down / float(count_down)
+    avg_proc = avg_proc / float(count_proc)
 
-        total_count_up += count_up
-        total_count_down += count_down
-        total_count_proc += count_proc
+    data['run_results']['frames'] = frames
+    data['run_results']['avg_up'] = avg_up
+    data['run_results']['avg_down'] = avg_down
+    data['run_results']['avg_proc'] = avg_proc
 
-        avg_up = avg_up / float(count_up)
-        avg_down = avg_down / float(count_down)
-        avg_proc = avg_proc / float(count_proc)
-
-        data['runs'][run_idx]['frames'] = run_frames
-        data['runs'][run_idx]['avg_up'] = avg_up
-        data['runs'][run_idx]['avg_down'] = avg_down
-        data['runs'][run_idx]['avg_proc'] = avg_proc
-
-    total_avg_up = total_avg_up / float(total_count_up)
-    total_avg_down = total_avg_down / float(total_count_down)
-    total_avg_proc = total_avg_proc / float(total_count_proc)
-
-    data['avg_up'] = total_avg_up
-    data['avg_down'] = total_avg_down
-    data['avg_proc'] = total_avg_proc
-
-    data['count_up'] = total_count_up
-    data['count_down'] = total_count_down
-    data['count_proc'] = total_count_proc
+    data['run_results']['count_up'] = count_up
+    data['run_results']['count_down'] = count_down
+    data['run_results']['count_proc'] = count_proc
 
     return data
 
@@ -266,29 +254,42 @@ def plot_ram_usage():
     # )
     plt.show()
 
+def load_system_stats_for_run(run_idx):
+    os.chdir('run_{}'.format(run_idx + 1))
+    df = pd.read_csv('system_stats.csv')
+    df['run'] = run_idx
+    os.chdir('..')
 
-def split_tcpdump(client_idx, tcpdump):
-    c_data = load_results(client_idx)
+    return df
 
-    ports = c_data['ports'].values()
-    pkts = rdpcap(tcpdump)
 
-    relevant_pkts = [
-        pkt for pkt in pkts
-        if pkt[TCP].sport in ports or pkt[TCP].dport in ports
-    ]
+@click.command()
+@click.argument('experiment_id',
+                type=click.Path(dir_okay=True, file_okay=False, exists=True))
+@click.argument('n_clients', type=int)
+@click.argument('n_runs', type=int)
+def prepare_client_stats(experiment_id, n_clients, n_runs):
+    os.chdir(experiment_id)
+    runs = dict()
+    system_stats = pd.DataFrame()
+    for run_idx in range(n_runs):
+        clients = parse_all_clients_for_run(n_clients, run_idx)
+        runs['run_{}'.format(run_idx)] = clients
 
-    filename = '{:02}_dump.pcap'.format(client_idx)
-    wrpcap(filename, relevant_pkts)
+        system = load_system_stats_for_run(run_idx)
+        if system_stats.empty:
+            system_stats = system
+        else:
+            system_stats = pd.concat([system_stats, system], ignore_index=True)
+
+    with open('total_stats.json', 'w') as f:
+        json.dump(runs, f)
+
+    system_stats.to_csv('total_system_stats.csv')
+
+    os.chdir('..')
+
 
 
 if __name__ == '__main__':
-    os.chdir('./10Clients_IdealBenchmark')
-    for i in range(10):
-        # split_tcpdump(i, 'tcp.pcap')
-        data = parse_client_stats(i)
-        plot_rtts(data)
-        plot_avg_times(data)
-        # plot_task_times_from_frames(data)
-    plot_ram_usage()
-    plot_cpu_load()
+    prepare_client_stats()
