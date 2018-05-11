@@ -16,69 +16,68 @@ class LEGOTCPdumpParser():
     def extract_incoming_timestamps(self, dport: int) -> Dict[int, list]:
         # pkts = rdpcap(pcapf)
         processed_frames = dict()
-        pkts = [pkt for pkt in self.pkts if
-                pkt[TCP].dport == dport and Raw in pkt]
 
-        for pkt in pkts:
-            data = bytes(pkt[TCP].payload)
-            h_len_net = data[:4]
-            data = data[4:]
-            try:
-                (h_len,) = struct.unpack('>I', h_len_net)
-                header_net = data[:h_len]
-                (header,) = struct.unpack('>{}s'.format(h_len), header_net)
-                d_header = json.loads(header.decode('utf-8'))
+        for pkt in self.pkts:
+            if TCP in pkt and Raw in pkt and pkt[TCP].dport == dport:
+                try:
+                    # incoming timestamps are different
+                    # we know the packet header only includes the {frame_id}
+                    # part, so we can directly try to parse it using the info
+                    # provided in payload itself
 
-                # store all timestamps
-                if d_header['frame_id'] not in processed_frames.keys():
-                    processed_frames[d_header['frame_id']] = []
+                    payload = bytes(pkt[TCP].payload)
 
-                processed_frames[d_header['frame_id']].append(
-                    pkt.time * 1000)
+                    (header_len,) = struct.unpack('>I', payload[:4])
+                    (header,) = struct.unpack(
+                        '>{}s'.format(header_len), payload[4:header_len + 4]
+                    )
 
+                    frame_id_json = json.loads(header.decode('utf-8'))
+                    frame_id = frame_id_json['frame_id']
+                    if frame_id not in processed_frames.keys():
+                        processed_frames[frame_id] = list()
 
-            except Exception as e:
-                # print(e)
-                continue
+                    # store the time as milliseconds
+                    processed_frames[frame_id].append(pkt.time * 1000.0)
+
+                except Exception:
+                    continue
 
         return processed_frames
 
     def extract_outgoing_timestamps(self, sport: int) -> Dict[int, list]:
         # pkts = rdpcap(pcapf)
         processed_frames = dict()
-        packets = [pkt for pkt in self.pkts if pkt[TCP].sport == sport and
-                   Raw in pkt]
 
-        for i in range(len(packets)):
-            pkt = packets[i]
-            data = bytes(pkt[TCP].payload)
-            h_len_net = data[:4]
-            data = data[4:]
-            try:
-                (h_len,) = struct.unpack('>I', h_len_net)
-                while len(data) < h_len:
-                    i += 1
-                    data += bytes(packets[i][TCP].payload)
+        for pkt in self.pkts:
+            if TCP in pkt and Raw in pkt and pkt[TCP].sport == sport:
+                try:
+                    # grab a slice of the payload.
+                    # we skip the first 4 bytes, since that's reserved for the
+                    # length of the message.
+                    # the 80 bytes is a bit arbitrary, but it's just so we can
+                    # be sure we grab enough data to get the "frame_id" part of
+                    # the message
+                    data = bytes(pkt[TCP].payload)[4:80].decode('utf-8')
+                    idx = data.index('"frame_id"')
+                    comma_idx = data.index(',', idx, -1)
+                    frame_id_txt = data[idx:comma_idx]
+                    frame_id_json = json.loads('{' + frame_id_txt + '}')
 
-                header_net = data[:h_len]
-                (header,) = struct.unpack('>{}s'.format(h_len), header_net)
-                d_header = json.loads(header.decode('utf-8'))
+                    frame_id = frame_id_json['frame_id']
+                    if frame_id not in processed_frames.keys():
+                        processed_frames[frame_id] = list()
 
-                # store all timestamps
-                if d_header['frame_id'] not in processed_frames.keys():
-                    processed_frames[d_header['frame_id']] = []
+                    # store the time as milliseconds
+                    processed_frames[frame_id].append(pkt.time * 1000.0)
 
-                processed_frames[d_header['frame_id']].append(pkt.time * 1000)
-
-
-            except Exception as e:
-                # print(e)
-                continue
+                except Exception:
+                    continue
 
         return processed_frames
 
 
 if __name__ == '__main__':
-    parser = LEGOTCPdumpParser('1Client_TestBenchmark/run_1/tcp.pcap')
-    print(parser.extract_incoming_timestamps(8999))
-    print(parser.extract_outgoing_timestamps(8988))
+    parser = LEGOTCPdumpParser('10Clients_TestBenchmark/run_1/tcp.pcap')
+    print(parser.extract_incoming_timestamps(60018))
+    print(parser.extract_outgoing_timestamps(60019))

@@ -56,11 +56,18 @@ def _parse_client_stats_for_run(client_idx, parser):
     count_proc = 0
 
     for frame in data['run_results']['frames']:
-        frame_id = frame['frame_id']
-        client_send = frame['sent']
-        server_recv = server_in[frame_id].pop(0) + server_ntp_offset
-        server_send = server_out[frame_id].pop(0) + server_ntp_offset
-        client_recv = frame['recv']
+        try:
+            frame_id = frame['frame_id']
+            client_send = frame['sent']
+            server_recv = server_in[frame_id].pop(0) + server_ntp_offset
+            server_send = server_out[frame_id].pop(0) + server_ntp_offset
+            client_recv = frame['recv']
+        except KeyError as e:
+            print(e)
+            print(os.getcwd())
+            print('Client: ', client_idx)
+            print('Ports: ', {'video': video_port, 'result': result_port})
+            raise e
 
         uplink = server_recv - client_send
         processing = server_send - server_recv
