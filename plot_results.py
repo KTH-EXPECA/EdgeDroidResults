@@ -5,6 +5,7 @@ from statistics import mean, stdev
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from scipy.stats import lognorm
 
 N_RUNS = 5
 
@@ -27,29 +28,125 @@ def autolabel(ax: plt.Axes, rects: List[plt.Rectangle], center=False) -> None:
                 ha='center', va='bottom', weight='bold')
 
 
-def plot_proctime_dist(experiments: Dict) -> None:
+def plot_time_dist(experiments: Dict) -> None:
     root_dir = os.getcwd()
-    data = []
+    up_results = []
+    down_results = []
+    proc_results = []
     for exp_name, exp_dir in experiments.items():
         os.chdir(root_dir + '/' + exp_dir)
         data = pd.read_csv('total_frame_stats.csv')
         processing = []
+        uplink = []
+        downlink = []
         for row in data.itertuples():
             proc = row.server_send - row.server_recv
+            up = row.server_recv - row.client_send
+            down = row.client_recv - row.server_send
             # rtt = row.client_recv - row.client_send
             if proc > 0:
                 processing.append(proc)
+
+            if up > 0:
+                uplink.append(up)
+
+            if down > 0:
+                downlink.append(down)
+
         os.chdir('..')
-        data.append(processing)
+        proc_results.append(processing)
+        up_results.append(uplink)
+        down_results.append(downlink)
 
-    fig, ax = plt.subplots()
-    plt.style.use('seaborn-deep')
+    with plt.style.context('ggplot'):
 
-    bins = np.linspace(0, 1000, num=50)
-    ax.hist(data, bins, label=experiments.keys())
-    ax.set_ylabel('Time [ms]')
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    plt.show()
+        # processing times
+
+        fig, ax = plt.subplots()
+        abs_max = max([max(x) for x in proc_results])
+        abs_min = min([min(x) for x in proc_results])
+        if abs_min == 0:
+            abs_min = 1
+
+        bins = np.logspace(np.log10(abs_min), np.log10(abs_max), 30)
+
+        for i, result in enumerate(proc_results):
+            ax.hist(result, bins,
+                       label=list(experiments.keys())[i],
+                       # norm_hist=True
+                       alpha=0.5,
+                       density=True)
+
+            shape, loc, scale = lognorm.fit(result)
+            pdf = lognorm.pdf(bins, shape, loc, scale)
+            ax.plot(bins, pdf,
+                       label=list(experiments.keys())[i] + ' PDF')
+
+        plt.title('Processing times')
+        ax.set_xscale("log")
+        ax.set_xlabel('Time [ms]')
+        ax.set_ylabel('Density')
+        plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+        plt.show()
+
+        # uplink times
+        fig, ax = plt.subplots()
+        abs_max = max([max(x) for x in up_results])
+        abs_min = min([min(x) for x in up_results])
+        if abs_min == 0:
+            abs_min = 1
+
+        bins = np.logspace(np.log10(abs_min), np.log10(abs_max), 30)
+        # bins = np.linspace(abs_min, abs_max, 30)
+
+        for i, result in enumerate(up_results):
+            ax.hist(result, bins,
+                       label=list(experiments.keys())[i],
+                       # norm_hist=True
+                       alpha=0.5,
+                       density=True)
+
+            # shape, loc, scale = lognorm.fit(result)
+            # pdf = lognorm.pdf(bins, shape, loc, scale)
+            # ax[1].plot(bins, pdf,
+            #            label=list(experiments.keys())[i] + ' PDF')
+
+        plt.title('Uplink times')
+        ax.set_xscale("log")
+        ax.set_xlabel('Time [ms]')
+        ax.set_ylabel('Density')
+        plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+        plt.show()
+
+        # downlink times
+        fig, ax = plt.subplots()
+        abs_max = max([max(x) for x in down_results])
+        abs_min = min([min(x) for x in down_results])
+        if abs_min == 0:
+            abs_min = 1
+
+        bins = np.logspace(np.log10(abs_min), np.log10(abs_max), 30)
+        # bins = np.linspace(abs_min, abs_max, 30)
+
+        for i, result in enumerate(down_results):
+            ax.hist(result, bins,
+                       label=list(experiments.keys())[i],
+                       # norm_hist=True
+                       alpha=0.5,
+                       density=True)
+
+            # shape, loc, scale = lognorm.fit(result)
+            # pdf = lognorm.pdf(bins, shape, loc, scale)
+            # ax[1].plot(bins, pdf,
+            #            label=list(experiments.keys())[i] + ' PDF')
+
+        plt.title('Downlink times')
+        ax.set_xscale("log")
+        ax.set_xlabel('Time [ms]')
+        ax.set_ylabel('Density')
+
+        plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+        plt.show()
 
 
 def plot_avg_times(experiments: Dict) -> None:
@@ -194,4 +291,4 @@ if __name__ == '__main__':
 
     plot_avg_times(experiments)
     plot_cpu_loads(cpu_loads, list(experiments.keys()))
-    plot_proctime_dist(experiments)
+    plot_time_dist(experiments)
