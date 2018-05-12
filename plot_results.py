@@ -27,6 +27,31 @@ def autolabel(ax: plt.Axes, rects: List[plt.Rectangle], center=False) -> None:
                 ha='center', va='bottom', weight='bold')
 
 
+def plot_proctime_dist(experiments: Dict) -> None:
+    root_dir = os.getcwd()
+    data = []
+    for exp_name, exp_dir in experiments.items():
+        os.chdir(root_dir + '/' + exp_dir)
+        data = pd.read_csv('total_frame_stats.csv')
+        processing = []
+        for row in data.itertuples():
+            proc = row.server_send - row.server_recv
+            # rtt = row.client_recv - row.client_send
+            if proc > 0:
+                processing.append(proc)
+        os.chdir('..')
+        data.append(processing)
+
+    fig, ax = plt.subplots()
+    plt.style.use('seaborn-deep')
+
+    bins = np.linspace(0, 1000, num=50)
+    ax.hist(data, bins, label=experiments.keys())
+    ax.set_ylabel('Time [ms]')
+    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    plt.show()
+
+
 def plot_avg_times(experiments: Dict) -> None:
     uplink_avg = []
     downlink_avg = []
@@ -169,3 +194,4 @@ if __name__ == '__main__':
 
     plot_avg_times(experiments)
     plot_cpu_loads(cpu_loads, list(experiments.keys()))
+    plot_proctime_dist(experiments)
