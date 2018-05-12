@@ -5,7 +5,6 @@ from collections import namedtuple
 
 import pandas as pd
 from scapy.all import *
-from statistics import mean, stdev
 import click
 
 from lego_timing import LEGOTCPdumpParser
@@ -38,31 +37,38 @@ def parse_all_clients_for_run(num_clients, run_idx):
     start_cutoff = num_clients * STAGGER_INTERVAL * 1000.0 + run_start
     end_cutoff = run_end - num_clients * STAGGER_INTERVAL * 1000.0
 
-    clients = dict()
+    df = pd.DataFrame()
     for i in range(num_clients):
-        clients['client_{}'.format(i)] = \
-            _parse_client_stats_for_run(i, parser, start_cutoff,
-                                        end_cutoff, server_ntp_offset)
+        client_df = _parse_client_stats_for_run(i, parser, server_ntp_offset,
+                                                start_cutoff, end_cutoff)
+        client_df['run_id'] = run_idx
+
+        if df.empty:
+            df = client_df
+        else:
+            df = pd.concat([df, client_df], ignore_index=True)
 
     os.chdir('..')
-    return clients
+    return df
 
 
-def _parse_client_stats_for_run(client_idx, parser,
-                                start_cutoff, end_cutoff, server_offset):
+def _parse_client_stats_for_run(client_idx, parser, server_offset,
+                                start_cutoff, end_cutoff):
     data = load_results(client_idx)
     video_port = data['ports']['video']
     result_port = data['ports']['result']
 
-    # parser = LEGOTCPdumpParser('{:02}_dump.pcap'.format(client_idx))
-
     server_in = parser.extract_incoming_timestamps(video_port)
     server_out = parser.extract_outgoing_timestamps(result_port)
 
-    frames = []
-    up = []
-    down = []
-    proc = []
+    n_data = {
+        'client_id'  : [],
+        'frame_id'   : [],
+        'client_send': [],
+        'server_recv': [],
+        'server_send': [],
+        'client_recv': []
+    }
 
     for frame in data['run_results']['frames']:
         try:
@@ -71,6 +77,17 @@ def _parse_client_stats_for_run(client_idx, parser,
             server_recv = server_in[frame_id].pop(0) + server_offset
             server_send = server_out[frame_id].pop(0) + server_offset
             client_recv = frame['recv']
+
+            if client_send < start_cutoff or client_recv > end_cutoff:
+                continue
+
+            n_data['client_id'].append(client_idx)
+            n_data['frame_id'].append(frame_id)
+            n_data['client_send'].append(client_send)
+            n_data['server_recv'].append(server_recv)
+            n_data['server_send'].append(server_send)
+            n_data['client_recv'].append(client_recv)
+
         except KeyError as e:
             print(e)
             print(os.getcwd())
@@ -78,49 +95,7 @@ def _parse_client_stats_for_run(client_idx, parser,
             print('Ports: ', {'video': video_port, 'result': result_port})
             raise e
 
-        if client_send < start_cutoff or client_recv > end_cutoff:
-            continue
-
-        uplink = server_recv - client_send
-        processing = server_send - server_recv
-        downlink = client_recv - server_send
-        rtt = client_recv - client_send
-
-        try:
-            assert processing > 0
-            frames.append(Frame(frame_id, rtt, uplink,
-                                downlink, processing,
-                                client_send, client_recv,
-                                server_send, server_recv)._asdict())
-
-            if uplink >= 0:
-                up.append(uplink)
-
-            if downlink >= 0:
-                down.append(downlink)
-
-            proc.append(processing)
-        except AssertionError as e:
-            frames.append(Frame(frame_id, rtt, None, None, None,
-                                client_send, client_recv,
-                                server_send, server_recv))
-
-    frames.sort(key=lambda x: x['id'])
-
-    data['run_results']['frames'] = frames
-    data['run_results']['avg_up'] = mean(up)
-    data['run_results']['avg_down'] = mean(down)
-    data['run_results']['avg_proc'] = mean(proc)
-
-    data['run_results']['std_up'] = stdev(up)
-    data['run_results']['std_down'] = stdev(down)
-    data['run_results']['std_proc'] = stdev(proc)
-
-    data['run_results']['count_up'] = len(up)
-    data['run_results']['count_down'] = len(down)
-    data['run_results']['count_proc'] = len(proc)
-
-    return data
+    return pd.DataFrame.from_dict(n_data)
 
 
 def load_system_stats_for_run(run_idx, num_clients):
@@ -154,12 +129,15 @@ def load_system_stats_for_run(run_idx, num_clients):
               help='Only prepare system stats.')
 def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
     os.chdir(experiment_id)
-    runs = dict()
+    runs = pd.DataFrame()
     system_stats = pd.DataFrame()
     for run_idx in range(n_runs):
         if not only_system_stats:
-            clients = parse_all_clients_for_run(n_clients, run_idx)
-            runs['run_{}'.format(run_idx)] = clients
+            clients_df = parse_all_clients_for_run(n_clients, run_idx)
+            if runs.empty:
+                runs = clients_df
+            else:
+                runs = pd.concat([runs, clients_df], ignore_index=True)
 
         system = load_system_stats_for_run(run_idx, n_clients)
         if system_stats.empty:
@@ -168,8 +146,7 @@ def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
             system_stats = pd.concat([system_stats, system], ignore_index=True)
 
     if not only_system_stats:
-        with open('total_stats.json', 'w') as f:
-            json.dump(runs, f)
+        runs.to_csv('total_frame_stats.csv')
 
     system_stats.to_csv('total_system_stats.csv')
     os.chdir('..')
