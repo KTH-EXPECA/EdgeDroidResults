@@ -2,12 +2,13 @@ import itertools
 import json
 import math
 import os
+import psutil
 from typing import Dict, List, Tuple
 from statistics import mean, stdev
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-from scipy.stats import lognorm
+from scipy import stats
 
 N_RUNS = 25
 CONFIDENCE = 0.95
@@ -81,8 +82,8 @@ def plot_time_dist(experiments: Dict) -> None:
                     alpha=0.5,
                     density=True)
 
-            shape, loc, scale = lognorm.fit(result)
-            pdf = lognorm.pdf(bins, shape, loc, scale)
+            shape, loc, scale = stats.lognorm.fit(result)
+            pdf = stats.lognorm.pdf(bins, shape, loc, scale)
             ax.plot(bins, pdf,
                     label=list(experiments.keys())[i] + ' PDF')
 
@@ -180,7 +181,7 @@ def get_downlink_stats_for_run(df: pd.DataFrame, run_idx: int) \
     return run_df['downlink'].mean(), run_df['downlink'].std()
 
 
-def plot_avg_times(experiments: Dict) -> None:
+def plot_avg_times_runsample(experiments: Dict) -> None:
     root_dir = os.getcwd()
 
     up = []
@@ -228,9 +229,22 @@ def plot_avg_times(experiments: Dict) -> None:
         up_std = mean([x[1] for x in uplink])
         down_std = mean([x[1] for x in downlink])
 
-        proc_conf = Z_STAR * (proc_std / math.sqrt(N_RUNS))
-        up_conf = Z_STAR * (up_std / math.sqrt(N_RUNS))
-        down_conf = Z_STAR * (down_std / math.sqrt(N_RUNS))
+        # proc_conf = Z_STAR * (proc_std / math.sqrt(N_RUNS))
+        # up_conf = Z_STAR * (up_std / math.sqrt(N_RUNS))
+        # down_conf = Z_STAR * (down_std / math.sqrt(N_RUNS))
+        proc_conf = stats.norm.interval(CONFIDENCE,
+                                        loc=proc_avg,
+                                        scale=proc_std / math.sqrt(N_RUNS))
+        up_conf = stats.norm.interval(CONFIDENCE,
+                                      loc=up_avg,
+                                      scale=up_std / math.sqrt(N_RUNS))
+        down_conf = stats.norm.interval(CONFIDENCE,
+                                        loc=down_avg,
+                                        scale=down_std / math.sqrt(N_RUNS))
+
+        proc_conf = [abs(x - proc_avg) for x in proc_conf]
+        up_conf = [abs(x - up_avg) for x in up_conf]
+        down_conf = [abs(x - down_avg) for x in down_conf]
 
         up.append(up_avg)
         down.append(down_avg)
@@ -239,6 +253,11 @@ def plot_avg_times(experiments: Dict) -> None:
         up_err.append(up_conf)
         down_err.append(down_conf)
         proc_err.append(proc_conf)
+
+    # turn error lists from Nx2 to 2XN for plotting
+    up_err = list(map(list, zip(*up_err)))
+    down_err = list(map(list, zip(*down_err)))
+    proc_err = list(map(list, zip(*proc_err)))
 
     # plot side by side
     bar_width = 0.3
@@ -252,21 +271,33 @@ def plot_avg_times(experiments: Dict) -> None:
                    yerr=up_err,
                    width=bar_width,
                    edgecolor='white',
-                   error_kw=dict(ecolor='gray', lw=1, capsize=2, capthick=1)
+                   error_kw=dict(
+                       ecolor='gray', lw=1,
+                       capsize=2, capthick=1,
+                       label='95% Confidence Int.'
+                   )
                    )
     rect2 = ax.bar(r2, proc,
                    label='Avg. processing time',
                    yerr=proc_err,
                    width=bar_width,
                    edgecolor='white',
-                   error_kw=dict(ecolor='gray', lw=1, capsize=2, capthick=1)
+                   error_kw=dict(
+                       ecolor='gray', lw=1,
+                       capsize=2, capthick=1,
+                       # label='95% Confidence Int.'
+                   )
                    )
     rect3 = ax.bar(r3, down,
                    label='Avg. downlink time',
                    yerr=down_err,
                    width=bar_width,
                    edgecolor='white',
-                   error_kw=dict(ecolor='gray', lw=1, capsize=2, capthick=1)
+                   error_kw=dict(
+                       ecolor='gray', lw=1,
+                       capsize=2, capthick=1,
+                       # label='95% Confidence Int.'
+                   )
                    )
 
     autolabel(ax, rect1)
@@ -277,6 +308,7 @@ def plot_avg_times(experiments: Dict) -> None:
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
 
     # Add xticks on the middle of the group bars
+    plt.title('Time comparison (each run is a sample)')
     plt.xlabel('Number of clients', fontweight='bold')
     plt.xticks([r + bar_width for r in range(len(experiments))],
                experiments.keys())
@@ -290,12 +322,146 @@ def plot_avg_times(experiments: Dict) -> None:
     plt.show()
 
 
-def plot_cpu_loads(cpu_loads: List[float],
-                   experiment_names: List[str]) -> None:
-    assert len(cpu_loads) == len(experiment_names)
+def plot_avg_times_framesample(experiments: Dict) -> None:
+    root_dir = os.getcwd()
+
+    up = []
+    down = []
+    proc = []
+    up_err = []
+    down_err = []
+    proc_err = []
+
+    for exp_dir in experiments.values():
+        # iterate over experiments
+        os.chdir(root_dir + '/' + exp_dir)
+        data = pd.read_csv('total_frame_stats.csv')
+        os.chdir(root_dir)
+
+        data['processing'] = data['server_send'] - data['server_recv']
+        data['uplink'] = data['server_recv'] - data['client_send']
+        data['downlink'] = data['client_recv'] - data['server_send']
+
+        proc_df = data.loc[data['processing'] > 0]['processing']
+        up_df = data.loc[data['uplink'] > 0]['uplink']
+        down_df = data.loc[data['downlink'] > 0]['downlink']
+
+        proc_avg = proc_df.mean()
+        up_avg = up_df.mean()
+        down_avg = down_df.mean()
+
+        proc_std = proc_df.std()
+        up_std = up_df.std()
+        down_std = down_df.std()
+
+        shape, loc, scale = stats.lognorm.fit(proc_df)
+        proc_conf = stats.lognorm \
+            .interval(CONFIDENCE,
+                      shape,
+                      loc=proc_avg,
+                      scale=proc_std / math.sqrt(len(proc_df)))
+
+        shape, loc, scale = stats.lognorm.fit(up_df)
+        up_conf = stats.lognorm \
+            .interval(CONFIDENCE,
+                      shape,
+                      loc=up_avg,
+                      scale=up_std / math.sqrt(len(up_df)))
+
+        shape, loc, scale = stats.lognorm.fit(down_df)
+        down_conf = stats.lognorm \
+            .interval(CONFIDENCE,
+                      shape,
+                      loc=down_avg,
+                      scale=down_std / math.sqrt(len(down_df)))
+
+        proc_conf = [abs(x - proc_avg) for x in proc_conf]
+        up_conf = [abs(x - up_avg) for x in up_conf]
+        down_conf = [abs(x - down_avg) for x in down_conf]
+
+        up.append(up_avg)
+        down.append(down_avg)
+        proc.append(proc_avg)
+
+        up_err.append(up_conf)
+        down_err.append(down_conf)
+        proc_err.append(proc_conf)
+
+        # turn error lists from Nx2 to 2XN for plotting
+    up_err = list(map(list, zip(*up_err)))
+    down_err = list(map(list, zip(*down_err)))
+    proc_err = list(map(list, zip(*proc_err)))
+
+    # plot side by side
+    bar_width = 0.3
+    r1 = np.arange(len(experiments))
+    r2 = [x + bar_width for x in r1]
+    r3 = [x + bar_width for x in r2]
 
     fig, ax = plt.subplots()
-    rect = ax.bar(experiment_names, cpu_loads, label='Average CPU load')
+    rect1 = ax.bar(r1, up,
+                   label='Avg. uplink time',
+                   yerr=up_err,
+                   width=bar_width,
+                   edgecolor='white',
+                   error_kw=dict(
+                       ecolor='gray', lw=1,
+                       capsize=2, capthick=1,
+                       label='95% Confidence Int.'
+                   )
+                   )
+    rect2 = ax.bar(r2, proc,
+                   label='Avg. processing time',
+                   yerr=proc_err,
+                   width=bar_width,
+                   edgecolor='white',
+                   error_kw=dict(
+                       ecolor='gray', lw=1,
+                       capsize=2, capthick=1,
+                       # label='95% Confidence Int.'
+                   )
+                   )
+    rect3 = ax.bar(r3, down,
+                   label='Avg. downlink time',
+                   yerr=down_err,
+                   width=bar_width,
+                   edgecolor='white',
+                   error_kw=dict(
+                       ecolor='gray', lw=1,
+                       capsize=2, capthick=1,
+                       # label='95% Confidence Int.'
+                   )
+                   )
+
+    autolabel(ax, rect1)
+    autolabel(ax, rect2)
+    autolabel(ax, rect3)
+
+    ax.set_ylabel('Time [ms]')
+    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+
+    # Add xticks on the middle of the group bars
+    plt.title('Time comparison (each frame is a sample)')
+    plt.xlabel('Number of clients', fontweight='bold')
+    plt.xticks([r + bar_width for r in range(len(experiments))],
+               experiments.keys())
+
+    plt.tight_layout()
+    # plt.savefig(
+    #     'client_{}_avgtimes_.png'.format(data['client_id']),
+    #     bbox_inches='tight'
+    # )
+
+    plt.show()
+
+
+def plot_cpu_loads(experiments: Dict) -> None:
+    system_data = [load_system_data_for_experiment(x)
+                   for x in experiments.values()]
+    cpu_loads = [get_avg_cpu_load_for_experiment(x) for x in system_data]
+
+    fig, ax = plt.subplots()
+    rect = ax.bar(experiments.keys(), cpu_loads, label='Average CPU load')
     autolabel(ax, rect)
 
     ax.set_ylabel('Load [%]')
@@ -303,16 +469,38 @@ def plot_cpu_loads(cpu_loads: List[float],
     plt.show()
 
 
-def get_avg_cpu_load_for_experiment(experiment_df: pd.DataFrame) -> float:
-    count = 0
-    total_sum = 0
+def plot_ram_usage(experiments: Dict) -> None:
+    system_data = [load_system_data_for_experiment(x)
+                   for x in experiments.values()]
+    ram_usage = [get_avg_ram_usage_for_experiment(x) for x in system_data]
+    ram_usage = [x / float(1024 * 1024 * 1024) for x in ram_usage]
 
-    for _, row in experiment_df.iterrows():
-        if row['run_start_cutoff'] < row['timestamp'] < row['run_end_cutoff']:
-            count += 1
-            total_sum += row['cpu_load']
+    fig, ax = plt.subplots()
+    rect = ax.bar(experiments.keys(), ram_usage, label='Average RAM usage')
+    autolabel(ax, rect)
 
-    return total_sum / (1.0 * count)
+    total_mem = psutil.virtual_memory().total / float(1024 * 1024 * 1024)
+
+    # ax.set_ylim([0, total_mem + 3])
+    ax.axhline(y=total_mem, color='red', label='Max. available memory')
+    ax.set_ylabel('Usage [GiB]')
+    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    plt.show()
+
+
+def get_avg_cpu_load_for_experiment(exp_df: pd.DataFrame) -> float:
+    samples = exp_df.loc[exp_df['run_start_cutoff'] < exp_df['timestamp']]
+    samples = samples.loc[exp_df['timestamp'] < exp_df['run_end_cutoff']]
+
+    return samples['cpu_load'].mean()
+
+
+def get_avg_ram_usage_for_experiment(exp_df: pd.DataFrame) -> float:
+    samples = exp_df.loc[exp_df['run_start_cutoff'] < exp_df['timestamp']]
+    samples = samples.loc[exp_df['timestamp'] < exp_df['run_end_cutoff']]
+
+    total_mem = psutil.virtual_memory().total
+    return (total_mem - samples['mem_avail']).mean()
 
 
 def load_data_for_experiment(experiment_id) -> Dict:
@@ -336,11 +524,8 @@ if __name__ == '__main__':
         '10 Clients': '10Clients_Benchmark'
     }
 
-    system_data = [load_system_data_for_experiment(x)
-                   for x in experiments.values()]
-
-    cpu_loads = [get_avg_cpu_load_for_experiment(x) for x in system_data]
-
-    plot_avg_times(experiments)
-    plot_cpu_loads(cpu_loads, list(experiments.keys()))
+    plot_avg_times_runsample(experiments)
+    # plot_avg_times_framesample(experiments)
+    plot_cpu_loads(experiments)
+    plot_ram_usage(experiments)
     plot_time_dist(experiments)
