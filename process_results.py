@@ -40,7 +40,7 @@ def parse_all_clients_for_run(run_idx, num_clients):
     start_cutoff = num_clients * STAGGER_INTERVAL * 1000.0 + run_start
     end_cutoff = run_end - num_clients * STAGGER_INTERVAL * 1000.0
     # with Pool(3) as pool:
-    client_dfs = itertools.starmap(
+    client_dfs = list(itertools.starmap(
         _parse_client_stats_for_run,
         zip(
             range(num_clients),
@@ -49,14 +49,13 @@ def parse_all_clients_for_run(run_idx, num_clients):
             itertools.repeat(start_cutoff),
             itertools.repeat(end_cutoff)
         )
-    )
+    ))
 
     for cdf in client_dfs:
         cdf['run_id'] = run_idx
 
     df = pd.concat(client_dfs, ignore_index=True)
     os.chdir('..')
-
     return df
 
     # for i in range(num_clients):
