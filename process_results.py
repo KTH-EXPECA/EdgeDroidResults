@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import json
-from collections import namedtuple
 from multiprocessing.pool import Pool
 
 import click
@@ -11,11 +10,6 @@ from scapy.all import *
 from lego_timing import LEGOTCPdumpParser
 
 START_WINDOW = 10.0
-
-Frame = namedtuple('Frame', ['id', 'rtt', 'uplink',
-                             'downlink', 'processing',
-                             'client_send', 'client_recv',
-                             'server_send', 'server_recv'])
 
 
 def load_results(client_idx):
@@ -87,6 +81,7 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
     n_data = {
         'client_id'  : [],
         'frame_id'   : [],
+        'feedback'   : [],
         'client_send': [],
         'server_recv': [],
         'server_send': [],
@@ -97,6 +92,7 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
         try:
             frame_id = frame['frame_id']
             client_send = frame['sent']
+            feedback = frame['feedback']
             server_recv = server_in[frame_id].pop(0) + server_offset
             server_send = server_out[frame_id].pop(0) + server_offset
             client_recv = frame['recv']
@@ -106,6 +102,7 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
 
             n_data['client_id'].append(client_idx)
             n_data['frame_id'].append(frame_id)
+            n_data['feedback'].append(feedback)
             n_data['client_send'].append(client_send)
             n_data['server_recv'].append(server_recv)
             n_data['server_send'].append(server_send)
@@ -121,7 +118,7 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
     return pd.DataFrame.from_dict(n_data)
 
 
-def load_system_stats_for_run(run_idx, num_clients):
+def load_system_stats_for_run(run_idx):
     os.chdir('run_{}'.format(run_idx + 1))
 
     print('Processing system stats for run {}'.format(run_idx))
@@ -134,8 +131,8 @@ def load_system_stats_for_run(run_idx, num_clients):
     run_start = server_stats['run_start']
     run_end = server_stats['run_end']
 
-    start_cutoff = num_clients * STAGGER_INTERVAL * 1000.0 + run_start
-    end_cutoff = run_end - num_clients * STAGGER_INTERVAL * 1000.0
+    start_cutoff = START_WINDOW * 1000.0 + run_start
+    end_cutoff = run_end - START_WINDOW * 1000.0
 
     df['run'] = run_idx
     df['run_start_cutoff'] = start_cutoff
@@ -168,14 +165,7 @@ def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
             runs = pd.concat(runs_df, ignore_index=True)
             runs.to_csv('total_frame_stats.csv')
 
-        system_dfs = pool.starmap(
-            load_system_stats_for_run,
-            zip(
-                range(n_runs),
-                itertools.repeat(n_clients)
-            )
-        )
-
+        system_dfs = pool.map(load_system_stats_for_run, range(n_runs))
         system_stats = pd.concat(system_dfs, ignore_index=True)
         system_stats.to_csv('total_system_stats.csv')
 
