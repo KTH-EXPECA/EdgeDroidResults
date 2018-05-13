@@ -1,13 +1,17 @@
+import itertools
 import json
+import math
 import os
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from statistics import mean, stdev
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from scipy.stats import lognorm
 
-N_RUNS = 5
+N_RUNS = 25
+CONFIDENCE = 0.95
+Z_STAR = 1.96
 
 
 def autolabel(ax: plt.Axes, rects: List[plt.Rectangle], center=False) -> None:
@@ -72,15 +76,15 @@ def plot_time_dist(experiments: Dict) -> None:
 
         for i, result in enumerate(proc_results):
             ax.hist(result, bins,
-                       label=list(experiments.keys())[i],
-                       # norm_hist=True
-                       alpha=0.5,
-                       density=True)
+                    label=list(experiments.keys())[i],
+                    # norm_hist=True
+                    alpha=0.5,
+                    density=True)
 
             shape, loc, scale = lognorm.fit(result)
             pdf = lognorm.pdf(bins, shape, loc, scale)
             ax.plot(bins, pdf,
-                       label=list(experiments.keys())[i] + ' PDF')
+                    label=list(experiments.keys())[i] + ' PDF')
 
         plt.title('Processing times')
         ax.set_xscale("log")
@@ -101,10 +105,10 @@ def plot_time_dist(experiments: Dict) -> None:
 
         for i, result in enumerate(up_results):
             ax.hist(result, bins,
-                       label=list(experiments.keys())[i],
-                       # norm_hist=True
-                       alpha=0.5,
-                       density=True)
+                    label=list(experiments.keys())[i],
+                    # norm_hist=True
+                    alpha=0.5,
+                    density=True)
 
             # shape, loc, scale = lognorm.fit(result)
             # pdf = lognorm.pdf(bins, shape, loc, scale)
@@ -130,10 +134,10 @@ def plot_time_dist(experiments: Dict) -> None:
 
         for i, result in enumerate(down_results):
             ax.hist(result, bins,
-                       label=list(experiments.keys())[i],
-                       # norm_hist=True
-                       alpha=0.5,
-                       density=True)
+                    label=list(experiments.keys())[i],
+                    # norm_hist=True
+                    alpha=0.5,
+                    density=True)
 
             # shape, loc, scale = lognorm.fit(result)
             # pdf = lognorm.pdf(bins, shape, loc, scale)
@@ -149,68 +153,117 @@ def plot_time_dist(experiments: Dict) -> None:
         plt.show()
 
 
+def get_processing_stats_for_run(df: pd.DataFrame, run_idx: int) \
+        -> Tuple[float, float]:
+    run_df = df.loc[df['run_id'] == run_idx]
+    run_df['processing'] = run_df['server_send'] - run_df['server_recv']
+    run_df = run_df.loc[run_df['processing'] > 0]
+
+    return run_df['processing'].mean(), run_df['processing'].std()
+
+
+def get_uplink_stats_for_run(df: pd.DataFrame, run_idx: int) \
+        -> Tuple[float, float]:
+    run_df = df.loc[df['run_id'] == run_idx]
+    run_df['uplink'] = run_df['server_recv'] - run_df['client_send']
+    run_df = run_df.loc[run_df['uplink'] > 0]
+
+    return run_df['uplink'].mean(), run_df['uplink'].std()
+
+
+def get_downlink_stats_for_run(df: pd.DataFrame, run_idx: int) \
+        -> Tuple[float, float]:
+    run_df = df.loc[df['run_id'] == run_idx]
+    run_df['downlink'] = run_df['client_recv'] - run_df['server_send']
+    run_df = run_df.loc[run_df['downlink'] > 0]
+
+    return run_df['downlink'].mean(), run_df['downlink'].std()
+
+
 def plot_avg_times(experiments: Dict) -> None:
-    uplink_avg = []
-    downlink_avg = []
-    processing_avg = []
-
-    up_error = []
-    down_error = []
-    proc_error = []
-
     root_dir = os.getcwd()
+
+    up = []
+    down = []
+    proc = []
+    up_err = []
+    down_err = []
+    proc_err = []
+
     for exp_dir in experiments.values():
+        # iterate over experiments
         os.chdir(root_dir + '/' + exp_dir)
         data = pd.read_csv('total_frame_stats.csv')
+        os.chdir(root_dir)
 
-        uplink = []
-        downlink = []
-        processing = []
-        for row in data.itertuples():
-            up = row.server_recv - row.client_send
-            proc = row.server_send - row.server_recv
-            down = row.client_recv - row.server_send
-            # rtt = row.client_recv - row.client_send
+        processing = list(itertools.starmap(
+            get_processing_stats_for_run,
+            zip(
+                itertools.repeat(data),
+                range(N_RUNS)
+            )
+        ))
 
-            if up > 0:
-                uplink.append(up)
-            if down > 0:
-                downlink.append(down)
-            if proc > 0:
-                processing.append(proc)
-        os.chdir('..')
+        uplink = list(itertools.starmap(
+            get_uplink_stats_for_run,
+            zip(
+                itertools.repeat(data),
+                range(N_RUNS)
+            )
+        ))
 
-        uplink_avg.append(mean(uplink))
-        downlink_avg.append(mean(downlink))
-        processing_avg.append(mean(processing))
+        downlink = list(itertools.starmap(
+            get_downlink_stats_for_run,
+            zip(
+                itertools.repeat(data),
+                range(N_RUNS)
+            )
+        ))
 
-        up_error.append(stdev(uplink))
-        down_error.append(stdev(downlink))
-        proc_error.append(stdev(processing))
+        proc_avg = mean([x[0] for x in processing])
+        up_avg = mean([x[0] for x in uplink])
+        down_avg = mean([x[0] for x in downlink])
 
+        proc_std = mean([x[1] for x in processing])
+        up_std = mean([x[1] for x in uplink])
+        down_std = mean([x[1] for x in downlink])
+
+        proc_conf = Z_STAR * (proc_std / math.sqrt(N_RUNS))
+        up_conf = Z_STAR * (up_std / math.sqrt(N_RUNS))
+        down_conf = Z_STAR * (down_std / math.sqrt(N_RUNS))
+
+        up.append(up_avg)
+        down.append(down_avg)
+        proc.append(proc_avg)
+
+        up_err.append(up_conf)
+        down_err.append(down_conf)
+        proc_err.append(proc_conf)
+
+    # plot side by side
     bar_width = 0.3
     r1 = np.arange(len(experiments))
     r2 = [x + bar_width for x in r1]
     r3 = [x + bar_width for x in r2]
 
     fig, ax = plt.subplots()
-    rect1 = ax.bar(r1, uplink_avg,
+    rect1 = ax.bar(r1, up,
                    label='Avg. uplink time',
-                   yerr=up_error,
+                   yerr=up_err,
                    width=bar_width,
                    edgecolor='white',
                    error_kw=dict(ecolor='gray', lw=1, capsize=2, capthick=1)
                    )
-    rect2 = ax.bar(r2, processing_avg,
+    rect2 = ax.bar(r2, proc,
                    label='Avg. processing time',
-                   yerr=proc_error,
+                   yerr=proc_err,
                    width=bar_width,
                    edgecolor='white',
                    error_kw=dict(ecolor='gray', lw=1, capsize=2, capthick=1)
                    )
-    rect3 = ax.bar(r3, downlink_avg,
+    rect3 = ax.bar(r3, down,
                    label='Avg. downlink time',
-                   yerr=down_error,
+                   yerr=down_err,
                    width=bar_width,
                    edgecolor='white',
                    error_kw=dict(ecolor='gray', lw=1, capsize=2, capthick=1)
@@ -278,12 +331,11 @@ def load_system_data_for_experiment(experiment_id) -> pd.DataFrame:
 
 if __name__ == '__main__':
     experiments = {
-        '1 Client'  : '1Client_IdealBenchmark',
-        '5 Clients' : '5Clients_IdealBenchmark',
-        '10 Clients': '10Clients_IdealBenchmark'
+        '1 Client'  : '1Client_Benchmark',
+        '5 Clients' : '5Clients_Benchmark',
+        '10 Clients': '10Clients_Benchmark'
     }
 
-    exp_data = [load_data_for_experiment(x) for x in experiments.values()]
     system_data = [load_system_data_for_experiment(x)
                    for x in experiments.values()]
 
