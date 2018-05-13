@@ -10,7 +10,7 @@ from scapy.all import *
 
 from lego_timing import LEGOTCPdumpParser
 
-STAGGER_INTERVAL = 1.0
+START_WINDOW = 10.0
 
 Frame = namedtuple('Frame', ['id', 'rtt', 'uplink',
                              'downlink', 'processing',
@@ -37,8 +37,8 @@ def parse_all_clients_for_run(run_idx, num_clients):
     run_start = server_stats['run_start']
     run_end = server_stats['run_end']
 
-    start_cutoff = num_clients * STAGGER_INTERVAL * 1000.0 + run_start
-    end_cutoff = run_end - num_clients * STAGGER_INTERVAL * 1000.0
+    start_cutoff = START_WINDOW * 1000.0 + run_start
+    end_cutoff = run_end - START_WINDOW * 1000.0
     # with Pool(3) as pool:
     client_dfs = list(itertools.starmap(
         _parse_client_stats_for_run,
