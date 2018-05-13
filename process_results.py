@@ -2,10 +2,11 @@
 
 import json
 from collections import namedtuple
+from multiprocessing.pool import Pool
 
+import click
 import pandas as pd
 from scapy.all import *
-import click
 
 from lego_timing import LEGOTCPdumpParser
 
@@ -23,8 +24,10 @@ def load_results(client_idx):
         return json.load(f, encoding='utf-8')
 
 
-def parse_all_clients_for_run(num_clients, run_idx):
+def parse_all_clients_for_run(run_idx, num_clients):
     os.chdir('run_{}'.format(run_idx + 1))
+    print('Processing {} clients for run {}'.format(num_clients, run_idx + 1))
+
     parser = LEGOTCPdumpParser('tcp.pcap')
     with open('server_stats.json', 'r') as f:
         server_stats = json.load(f)
@@ -36,25 +39,46 @@ def parse_all_clients_for_run(num_clients, run_idx):
 
     start_cutoff = num_clients * STAGGER_INTERVAL * 1000.0 + run_start
     end_cutoff = run_end - num_clients * STAGGER_INTERVAL * 1000.0
+    # with Pool(3) as pool:
+    client_dfs = itertools.starmap(
+        _parse_client_stats_for_run,
+        zip(
+            range(num_clients),
+            itertools.repeat(parser),
+            itertools.repeat(server_ntp_offset),
+            itertools.repeat(start_cutoff),
+            itertools.repeat(end_cutoff)
+        )
+    )
 
-    df = pd.DataFrame()
-    for i in range(num_clients):
-        client_df = _parse_client_stats_for_run(i, parser, server_ntp_offset,
-                                                start_cutoff, end_cutoff)
-        client_df['run_id'] = run_idx
+    for cdf in client_dfs:
+        cdf['run_id'] = run_idx
 
-        if df.empty:
-            df = client_df
-        else:
-            df = pd.concat([df, client_df], ignore_index=True)
-
+    df = pd.concat(client_dfs, ignore_index=True)
     os.chdir('..')
+
     return df
+
+    # for i in range(num_clients):
+    #     client_df = _parse_client_stats_for_run(i, parser, server_ntp_offset,
+    #                                             start_cutoff, end_cutoff)
+    #     client_df['run_id'] = run_idx
+    #
+    #     if df.empty:
+    #         df = client_df
+    #     else:
+    #         df = pd.concat([df, client_df], ignore_index=True)
+    #
+    # os.chdir('..')
+    # return df
 
 
 def _parse_client_stats_for_run(client_idx, parser, server_offset,
                                 start_cutoff, end_cutoff):
     data = load_results(client_idx)
+
+    print('Parsing stats for client {}'.format(client_idx))
+
     video_port = data['ports']['video']
     result_port = data['ports']['result']
 
@@ -100,6 +124,9 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
 
 def load_system_stats_for_run(run_idx, num_clients):
     os.chdir('run_{}'.format(run_idx + 1))
+
+    print('Processing system stats for run {}'.format(run_idx))
+
     df = pd.read_csv('system_stats.csv')
 
     with open('server_stats.json', 'r') as f:
@@ -129,26 +156,49 @@ def load_system_stats_for_run(run_idx, num_clients):
               help='Only prepare system stats.')
 def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
     os.chdir(experiment_id)
-    runs = pd.DataFrame()
-    system_stats = pd.DataFrame()
-    for run_idx in range(n_runs):
+
+    with Pool(min(6, n_runs)) as pool:
         if not only_system_stats:
-            clients_df = parse_all_clients_for_run(n_clients, run_idx)
-            if runs.empty:
-                runs = clients_df
-            else:
-                runs = pd.concat([runs, clients_df], ignore_index=True)
+            runs_df = pool.starmap(
+                parse_all_clients_for_run,
+                zip(
+                    range(n_runs),
+                    itertools.repeat(n_clients)
+                )
+            )
+            runs = pd.concat(runs_df, ignore_index=True)
+            runs.to_csv('total_frame_stats.csv')
 
-        system = load_system_stats_for_run(run_idx, n_clients)
-        if system_stats.empty:
-            system_stats = system
-        else:
-            system_stats = pd.concat([system_stats, system], ignore_index=True)
+        system_dfs = pool.starmap(
+            load_system_stats_for_run,
+            zip(
+                range(n_runs),
+                itertools.repeat(n_clients)
+            )
+        )
 
-    if not only_system_stats:
-        runs.to_csv('total_frame_stats.csv')
+        system_stats = pd.concat(system_dfs, ignore_index=True)
+        system_stats.to_csv('total_system_stats.csv')
 
-    system_stats.to_csv('total_system_stats.csv')
+    # for run_idx in range(n_runs):
+    #     if not only_system_stats:
+    #         clients_df = parse_all_clients_for_run(run_idx, n_clients)
+    #         if runs.empty:
+    #             runs = clients_df
+    #         else:
+    #             runs = pd.concat([runs, clients_df], ignore_index=True)
+    #
+    #     system = load_system_stats_for_run(run_idx, n_clients)
+    #     if system_stats.empty:
+    #         system_stats = system
+    #     else:
+    #         system_stats = pd.concat([system_stats, system],
+    # ignore_index=True)
+    #
+    # if not only_system_stats:
+    #     runs.to_csv('total_frame_stats.csv')
+    #
+    # system_stats.to_csv('total_system_stats.csv')
     os.chdir('..')
 
 
