@@ -135,8 +135,10 @@ def load_system_stats_for_run(run_idx):
     end_cutoff = run_end - START_WINDOW * 1000.0
 
     df['run'] = run_idx
-    df['run_start_cutoff'] = start_cutoff
-    df['run_end_cutoff'] = end_cutoff
+    df = df.loc[df['timestamp'] > start_cutoff]
+    df = df.loc[df['timestamp'] < end_cutoff]
+    # df['run_start_cutoff'] = start_cutoff
+    # df['run_end_cutoff'] = end_cutoff
 
     os.chdir('..')
 
