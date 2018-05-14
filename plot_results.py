@@ -14,7 +14,7 @@ from scipy import stats
 N_RUNS = 25
 CONFIDENCE = 0.95
 Z_STAR = 1.96
-SAMPLE_FACTOR = 10
+SAMPLE_FACTOR = 5
 
 Stats = NamedTuple('Stats', [('mean', float),
                              ('std', float),
