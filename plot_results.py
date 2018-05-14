@@ -11,7 +11,7 @@ import pandas as pd
 import psutil
 from scipy import stats
 
-N_RUNS = 25
+# n_runs = 25
 CONFIDENCE = 0.95
 Z_STAR = 1.96
 SAMPLE_FACTOR = 5
@@ -166,33 +166,6 @@ def plot_time_dist(experiments: Dict) -> None:
         plt.show()
 
 
-def get_processing_stats_for_run(df: pd.DataFrame, run_idx: int) \
-        -> Tuple[float, float]:
-    run_df = df.loc[df['run_id'] == run_idx]
-    run_df['processing'] = run_df['server_send'] - run_df['server_recv']
-    run_df = run_df.loc[run_df['processing'] > 0]
-
-    return run_df['processing'].mean(), run_df['processing'].std()
-
-
-def get_uplink_stats_for_run(df: pd.DataFrame, run_idx: int) \
-        -> Tuple[float, float]:
-    run_df = df.loc[df['run_id'] == run_idx]
-    run_df['uplink'] = run_df['server_recv'] - run_df['client_send']
-    run_df = run_df.loc[run_df['uplink'] > 0]
-
-    return run_df['uplink'].mean(), run_df['uplink'].std()
-
-
-def get_downlink_stats_for_run(df: pd.DataFrame, run_idx: int) \
-        -> Tuple[float, float]:
-    run_df = df.loc[df['run_id'] == run_idx]
-    run_df['downlink'] = run_df['client_recv'] - run_df['server_send']
-    run_df = run_df.loc[run_df['downlink'] > 0]
-
-    return run_df['downlink'].mean(), run_df['downlink'].std()
-
-
 def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     root_dir = os.getcwd()
 
@@ -303,15 +276,17 @@ def frames_stats(data: pd.DataFrame, feedback: bool = False) -> ExperimentTimes:
     #     # finally, only consider every 3rd frame for non-feedback frames
     #     frame_data = frame_data.iloc[::3, :]
 
+    n_runs = frame_data['run_id'].max() + 1
+
     if feedback:
         samples = [frame_data.loc[frame_data['run_id'] == run_id].sample()
-                   for run_id in range(N_RUNS)]
+                   for run_id in range(n_runs)]
     else:
         # find number of clients
         n_clients = frame_data['client_id'].max() + 1
         # take SAMPLE_FACTOR samples per client per run
         samples = []
-        for run_id in range(N_RUNS):
+        for run_id in range(n_runs):
             run_data = frame_data.loc[frame_data['run_id'] == run_id]
             for client_id in range(n_clients):
                 client_data = run_data.loc[run_data['client_id'] == client_id]
@@ -324,7 +299,7 @@ def frames_stats(data: pd.DataFrame, feedback: bool = False) -> ExperimentTimes:
     proc_std = samples['processing'].std()
     proc_conf = stats.norm.interval(CONFIDENCE,
                                     loc=proc_mean,
-                                    scale=proc_std / math.sqrt(N_RUNS))
+                                    scale=proc_std / math.sqrt(n_runs))
     proc_stats = Stats(proc_mean, proc_std, *proc_conf)
 
     # stats for uplink times:
@@ -332,7 +307,7 @@ def frames_stats(data: pd.DataFrame, feedback: bool = False) -> ExperimentTimes:
     up_std = samples['uplink'].std()
     up_conf = stats.norm.interval(CONFIDENCE,
                                   loc=up_mean,
-                                  scale=up_std / math.sqrt(N_RUNS))
+                                  scale=up_std / math.sqrt(n_runs))
     up_stats = Stats(up_mean, up_std, *up_conf)
 
     # stats for downlink times:
@@ -340,284 +315,10 @@ def frames_stats(data: pd.DataFrame, feedback: bool = False) -> ExperimentTimes:
     down_std = samples['downlink'].std()
     down_conf = stats.norm.interval(CONFIDENCE,
                                     loc=down_mean,
-                                    scale=down_std / math.sqrt(N_RUNS))
+                                    scale=down_std / math.sqrt(n_runs))
     down_stats = Stats(down_mean, down_std, *down_conf)
 
     return ExperimentTimes(proc_stats, up_stats, down_stats)
-
-
-def plot_avg_times_runsample(experiments: Dict) -> None:
-    root_dir = os.getcwd()
-
-    up = []
-    down = []
-    proc = []
-    up_err = []
-    down_err = []
-    proc_err = []
-
-    for exp_dir in experiments.values():
-        # iterate over experiments
-        os.chdir(root_dir + '/' + exp_dir)
-        data = pd.read_csv('total_frame_stats.csv')
-        os.chdir(root_dir)
-
-        processing = list(itertools.starmap(
-            get_processing_stats_for_run,
-            zip(
-                itertools.repeat(data),
-                range(N_RUNS)
-            )
-        ))
-
-        uplink = list(itertools.starmap(
-            get_uplink_stats_for_run,
-            zip(
-                itertools.repeat(data),
-                range(N_RUNS)
-            )
-        ))
-
-        downlink = list(itertools.starmap(
-            get_downlink_stats_for_run,
-            zip(
-                itertools.repeat(data),
-                range(N_RUNS)
-            )
-        ))
-
-        proc_avg = mean([x[0] for x in processing])
-        up_avg = mean([x[0] for x in uplink])
-        down_avg = mean([x[0] for x in downlink])
-
-        proc_std = mean([x[1] for x in processing])
-        up_std = mean([x[1] for x in uplink])
-        down_std = mean([x[1] for x in downlink])
-
-        # proc_conf = Z_STAR * (proc_std / math.sqrt(N_RUNS))
-        # up_conf = Z_STAR * (up_std / math.sqrt(N_RUNS))
-        # down_conf = Z_STAR * (down_std / math.sqrt(N_RUNS))
-        proc_conf = stats.norm.interval(CONFIDENCE,
-                                        loc=proc_avg,
-                                        scale=proc_std / math.sqrt(N_RUNS))
-        up_conf = stats.norm.interval(CONFIDENCE,
-                                      loc=up_avg,
-                                      scale=up_std / math.sqrt(N_RUNS))
-        down_conf = stats.norm.interval(CONFIDENCE,
-                                        loc=down_avg,
-                                        scale=down_std / math.sqrt(N_RUNS))
-
-        proc_conf = [abs(x - proc_avg) for x in proc_conf]
-        up_conf = [abs(x - up_avg) for x in up_conf]
-        down_conf = [abs(x - down_avg) for x in down_conf]
-
-        up.append(up_avg)
-        down.append(down_avg)
-        proc.append(proc_avg)
-
-        up_err.append(up_conf)
-        down_err.append(down_conf)
-        proc_err.append(proc_conf)
-
-    # turn error lists from Nx2 to 2XN for plotting
-    up_err = list(map(list, zip(*up_err)))
-    down_err = list(map(list, zip(*down_err)))
-    proc_err = list(map(list, zip(*proc_err)))
-
-    # plot side by side
-    bar_width = 0.3
-    r1 = np.arange(len(experiments))
-    r2 = [x + bar_width for x in r1]
-    r3 = [x + bar_width for x in r2]
-
-    fig, ax = plt.subplots()
-    rect1 = ax.bar(r1, up,
-                   label='Avg. uplink time',
-                   yerr=up_err,
-                   width=bar_width,
-                   edgecolor='white',
-                   error_kw=dict(
-                       ecolor='gray', lw=1,
-                       capsize=2, capthick=1,
-                       label='95% Confidence Int.'
-                   )
-                   )
-    rect2 = ax.bar(r2, proc,
-                   label='Avg. processing time',
-                   yerr=proc_err,
-                   width=bar_width,
-                   edgecolor='white',
-                   error_kw=dict(
-                       ecolor='gray', lw=1,
-                       capsize=2, capthick=1,
-                       # label='95% Confidence Int.'
-                   )
-                   )
-    rect3 = ax.bar(r3, down,
-                   label='Avg. downlink time',
-                   yerr=down_err,
-                   width=bar_width,
-                   edgecolor='white',
-                   error_kw=dict(
-                       ecolor='gray', lw=1,
-                       capsize=2, capthick=1,
-                       # label='95% Confidence Int.'
-                   )
-                   )
-
-    autolabel(ax, rect1)
-    autolabel(ax, rect2)
-    autolabel(ax, rect3)
-
-    ax.set_ylabel('Time [ms]')
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-
-    # Add xticks on the middle of the group bars
-    plt.title('Time comparison (each run is a sample)')
-    plt.xlabel('Number of clients', fontweight='bold')
-    plt.xticks([r + bar_width for r in range(len(experiments))],
-               experiments.keys())
-
-    plt.tight_layout()
-    # plt.savefig(
-    #     'client_{}_avgtimes_.png'.format(data['client_id']),
-    #     bbox_inches='tight'
-    # )
-
-    plt.show()
-
-
-def plot_avg_times_framesample(experiments: Dict) -> None:
-    root_dir = os.getcwd()
-
-    up = []
-    down = []
-    proc = []
-    up_err = []
-    down_err = []
-    proc_err = []
-
-    for exp_dir in experiments.values():
-        # iterate over experiments
-        os.chdir(root_dir + '/' + exp_dir)
-        data = pd.read_csv('total_frame_stats.csv')
-        os.chdir(root_dir)
-
-        data['processing'] = data['server_send'] - data['server_recv']
-        data['uplink'] = data['server_recv'] - data['client_send']
-        data['downlink'] = data['client_recv'] - data['server_send']
-
-        proc_df = data.loc[data['processing'] > 0]['processing']
-        up_df = data.loc[data['uplink'] > 0]['uplink']
-        down_df = data.loc[data['downlink'] > 0]['downlink']
-
-        proc_avg = proc_df.mean()
-        up_avg = up_df.mean()
-        down_avg = down_df.mean()
-
-        proc_std = proc_df.std()
-        up_std = up_df.std()
-        down_std = down_df.std()
-
-        shape, loc, scale = stats.lognorm.fit(proc_df)
-        proc_conf = stats.lognorm \
-            .interval(CONFIDENCE,
-                      shape,
-                      loc=proc_avg,
-                      scale=proc_std / math.sqrt(len(proc_df)))
-
-        shape, loc, scale = stats.lognorm.fit(up_df)
-        up_conf = stats.lognorm \
-            .interval(CONFIDENCE,
-                      shape,
-                      loc=up_avg,
-                      scale=up_std / math.sqrt(len(up_df)))
-
-        shape, loc, scale = stats.lognorm.fit(down_df)
-        down_conf = stats.lognorm \
-            .interval(CONFIDENCE,
-                      shape,
-                      loc=down_avg,
-                      scale=down_std / math.sqrt(len(down_df)))
-
-        proc_conf = [abs(x - proc_avg) for x in proc_conf]
-        up_conf = [abs(x - up_avg) for x in up_conf]
-        down_conf = [abs(x - down_avg) for x in down_conf]
-
-        up.append(up_avg)
-        down.append(down_avg)
-        proc.append(proc_avg)
-
-        up_err.append(up_conf)
-        down_err.append(down_conf)
-        proc_err.append(proc_conf)
-
-        # turn error lists from Nx2 to 2XN for plotting
-    up_err = list(map(list, zip(*up_err)))
-    down_err = list(map(list, zip(*down_err)))
-    proc_err = list(map(list, zip(*proc_err)))
-
-    # plot side by side
-    bar_width = 0.3
-    r1 = np.arange(len(experiments))
-    r2 = [x + bar_width for x in r1]
-    r3 = [x + bar_width for x in r2]
-
-    fig, ax = plt.subplots()
-    rect1 = ax.bar(r1, up,
-                   label='Avg. uplink time',
-                   yerr=up_err,
-                   width=bar_width,
-                   edgecolor='white',
-                   error_kw=dict(
-                       ecolor='gray', lw=1,
-                       capsize=2, capthick=1,
-                       label='95% Confidence Int.'
-                   )
-                   )
-    rect2 = ax.bar(r2, proc,
-                   label='Avg. processing time',
-                   yerr=proc_err,
-                   width=bar_width,
-                   edgecolor='white',
-                   error_kw=dict(
-                       ecolor='gray', lw=1,
-                       capsize=2, capthick=1,
-                       # label='95% Confidence Int.'
-                   )
-                   )
-    rect3 = ax.bar(r3, down,
-                   label='Avg. downlink time',
-                   yerr=down_err,
-                   width=bar_width,
-                   edgecolor='white',
-                   error_kw=dict(
-                       ecolor='gray', lw=1,
-                       capsize=2, capthick=1,
-                       # label='95% Confidence Int.'
-                   )
-                   )
-
-    autolabel(ax, rect1)
-    autolabel(ax, rect2)
-    autolabel(ax, rect3)
-
-    ax.set_ylabel('Time [ms]')
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-
-    # Add xticks on the middle of the group bars
-    plt.title('Time comparison (each frame is a sample)')
-    plt.xlabel('Number of clients', fontweight='bold')
-    plt.xticks([r + bar_width for r in range(len(experiments))],
-               experiments.keys())
-
-    plt.tight_layout()
-    # plt.savefig(
-    #     'client_{}_avgtimes_.png'.format(data['client_id']),
-    #     bbox_inches='tight'
-    # )
-
-    plt.show()
 
 
 def plot_cpu_loads(experiments: Dict) -> None:
