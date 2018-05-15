@@ -1,6 +1,6 @@
 # Non-ideal benchmark
 
-- 5 client device
+- 10 client device
 - Uncongested network
     - Network locked to a mostly unused channel (1)
     - Client far away from the AP to decrease wireless link quality.
