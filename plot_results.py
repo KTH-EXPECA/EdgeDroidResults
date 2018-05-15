@@ -373,9 +373,9 @@ def load_system_data_for_experiment(experiment_id) -> pd.DataFrame:
 if __name__ == '__main__':
     with plt.style.context('ggplot'):
         experiments = {
-            '1 Client'  : '1Client_Benchmark',
-            '5 Clients' : '5Clients_Benchmark',
-            '10 Clients': '10Clients_Benchmark'
+            '1 Client'  : '1Client_100Runs',
+            '5 Clients' : '5Clients_100Runs',
+            '10 Clients': '10Clients_100Runs'
         }
 
         plot_avg_times_frames(experiments, feedback=True)
