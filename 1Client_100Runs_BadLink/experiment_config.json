@@ -1,0 +1,15 @@
+{
+  "experiment_id": "LEGOHead_100Benchmark_BadLink",
+  "clients": 1,
+  "runs": 100,
+  "steps": 7,
+  "trace_root_url": "https://github.com/molguin92/CognitiveAssistanceTraces/releases/download/LEGOVideo2/",
+  "ntp_server": "130.237.72.211",
+  "ports": [
+    {
+      "video": 8098,
+      "result": 8111,
+      "control": 22222
+    }
+  ]
+}
