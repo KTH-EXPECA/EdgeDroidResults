@@ -17,6 +17,7 @@ from scipy import stats
 CONFIDENCE = 0.95
 Z_STAR = 1.96
 SAMPLE_FACTOR = 5
+MIN_SAMPLES = 500
 
 Stats = NamedTuple('Stats', [('mean', float),
                              ('std', float),
@@ -299,19 +300,38 @@ def sample_frame_stats(f_data: pd.DataFrame,
     else:
         # find number of clients
         n_clients = frame_data['client_id'].max() + 1
-        # take SAMPLE_FACTOR samples per client per run
-        samples = []
-        for run_id in u_runs:
-            run_data = frame_data.loc[frame_data['run_id'] == run_id]
-            for client_id in range(n_clients):
-                client_data = run_data.loc[run_data['client_id'] == client_id]
-                samples.append(client_data.sample(n=SAMPLE_FACTOR))
-                # if client_data.shape[0] >= SAMPLE_FACTOR:
-                #     samples.append(client_data.sample(n=SAMPLE_FACTOR))
-                # else:
-                #    samples.append(client_data)
+
+        adj_sampl_factor = SAMPLE_FACTOR
+        while True:
+            # take SAMPLE_FACTOR samples per client per run
+            samples = []
+            for run_id in u_runs:
+                run_data = frame_data.loc[frame_data['run_id'] == run_id]
+                for client_id in range(n_clients):
+                    client_data = run_data.loc[
+                        run_data['client_id'] == client_id]
+
+                    if not client_data.empty:
+                        if adj_sampl_factor <= client_data.shape[0]:
+                            samples.append(
+                                client_data.sample(n=adj_sampl_factor)
+                            )
+                        else:
+                            samples.append(client_data)
+
+            if sum(map(lambda s: s.shape[0], samples)) > MIN_SAMPLES:
+                break
+            else:
+                adj_sampl_factor += SAMPLE_FACTOR
+
+        # if client_data.shape[0] >= SAMPLE_FACTOR:
+        #     samples.append(client_data.sample(n=SAMPLE_FACTOR))
+        # else:
+        #    samples.append(client_data)
 
     samples = pd.concat(samples)
+
+    print(samples.shape[0])
 
     # stats for processing times:
     proc_mean = samples['processing'].mean()
@@ -434,9 +454,9 @@ def print_successful_runs(experiments):
 if __name__ == '__main__':
     with plt.style.context('ggplot'):
         experiments = {
-            '1 Client'  : '1Client_100Runs',
-            '5 Clients' : '5Clients_100Runs',
-            '10 Clients': '10Clients_100Runs'
+            '1 Client'  : '1Client_100Runs_BadLink',
+            '5 Clients' : '5Clients_100Runs_BadLink',
+            '10 Clients': '10Clients_100Runs_BadLink'
         }
 
         os.chdir('1Client_100Runs_BadLink')
