@@ -1,6 +1,7 @@
 import itertools
 import json
 import math
+import operator
 import os
 from statistics import mean
 from typing import Dict, List, Tuple, NamedTuple
@@ -45,125 +46,60 @@ def autolabel(ax: plt.Axes, rects: List[plt.Rectangle], center=False) -> None:
                 ha='center', va='bottom', weight='bold')
 
 
-def plot_time_dist(experiments: Dict) -> None:
+def plot_time_dist(experiments: Dict, feedback: bool) -> None:
     root_dir = os.getcwd()
-    up_results = []
-    down_results = []
-    proc_results = []
+    results = {}
+
     for exp_name, exp_dir in experiments.items():
         os.chdir(root_dir + '/' + exp_dir)
         data = pd.read_csv('total_frame_stats.csv')
-        processing = []
-        uplink = []
-        downlink = []
-        for row in data.itertuples():
-            proc = row.server_send - row.server_recv
-            up = row.server_recv - row.client_send
-            down = row.client_recv - row.server_send
-            # rtt = row.client_recv - row.client_send
-            if proc > 0:
-                processing.append(proc)
+        os.chdir(root_dir)
 
-            if up > 0:
-                uplink.append(up)
+        data = calculate_derived_metrics(data, feedback)
+        results[exp_name] = data
 
-            if down > 0:
-                downlink.append(down)
+    bin_min = min(map(
+        operator.methodcaller('min'),
+        map(
+            operator.itemgetter('processing'),
+            results.values()
+        )
+    ))
 
-        os.chdir('..')
-        proc_results.append(processing)
-        up_results.append(uplink)
-        down_results.append(downlink)
+    bin_max = max(map(
+        operator.methodcaller('max'),
+        map(
+            operator.itemgetter('processing'),
+            results.values()
+        )
+    ))
 
-    with plt.style.context('ggplot'):
+    fig, ax = plt.subplots()
+    bins = np.logspace(np.log10(bin_min), np.log10(bin_max), 30)
 
-        # processing times
+    for exp_name, data in results.items():
+        ax.hist(data['processing'], bins,
+                label=exp_name,
+                # norm_hist=True
+                alpha=0.5,
+                density=True)
 
-        fig, ax = plt.subplots()
-        abs_max = max([max(x) for x in proc_results])
-        abs_min = min([min(x) for x in proc_results])
-        if abs_min == 0:
-            abs_min = 1
+        shape, loc, scale = stats.lognorm.fit(data['processing'])
+        pdf = stats.lognorm.pdf(bins, shape, loc, scale)
+        ax.plot(bins, pdf,
+                label=exp_name + ' lognorm PDF')
 
-        bins = np.logspace(np.log10(abs_min), np.log10(abs_max), 30)
 
-        for i, result in enumerate(proc_results):
-            ax.hist(result, bins,
-                    label=list(experiments.keys())[i],
-                    # norm_hist=True
-                    alpha=0.5,
-                    density=True)
+    if feedback:
+        plt.title('Processing times for frames w/ feedback')
+    else:
+        plt.title('Processing times for frames w/o feedback')
 
-            shape, loc, scale = stats.lognorm.fit(result)
-            pdf = stats.lognorm.pdf(bins, shape, loc, scale)
-            ax.plot(bins, pdf,
-                    label=list(experiments.keys())[i] + ' PDF')
-
-        plt.title('Processing times')
-        ax.set_xscale("log")
-        ax.set_xlabel('Time [ms]')
-        ax.set_ylabel('Density')
-        plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-        plt.show()
-
-        # uplink times
-        fig, ax = plt.subplots()
-        abs_max = max([max(x) for x in up_results])
-        abs_min = min([min(x) for x in up_results])
-        if abs_min == 0:
-            abs_min = 1
-
-        bins = np.logspace(np.log10(abs_min), np.log10(abs_max), 30)
-        # bins = np.linspace(abs_min, abs_max, 30)
-
-        for i, result in enumerate(up_results):
-            ax.hist(result, bins,
-                    label=list(experiments.keys())[i],
-                    # norm_hist=True
-                    alpha=0.5,
-                    density=True)
-
-            # shape, loc, scale = lognorm.fit(result)
-            # pdf = lognorm.pdf(bins, shape, loc, scale)
-            # ax[1].plot(bins, pdf,
-            #            label=list(experiments.keys())[i] + ' PDF')
-
-        plt.title('Uplink times')
-        ax.set_xscale("log")
-        ax.set_xlabel('Time [ms]')
-        ax.set_ylabel('Density')
-        plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-        plt.show()
-
-        # downlink times
-        fig, ax = plt.subplots()
-        abs_max = max([max(x) for x in down_results])
-        abs_min = min([min(x) for x in down_results])
-        if abs_min == 0:
-            abs_min = 1
-
-        bins = np.logspace(np.log10(abs_min), np.log10(abs_max), 30)
-        # bins = np.linspace(abs_min, abs_max, 30)
-
-        for i, result in enumerate(down_results):
-            ax.hist(result, bins,
-                    label=list(experiments.keys())[i],
-                    # norm_hist=True
-                    alpha=0.5,
-                    density=True)
-
-            # shape, loc, scale = lognorm.fit(result)
-            # pdf = lognorm.pdf(bins, shape, loc, scale)
-            # ax[1].plot(bins, pdf,
-            #            label=list(experiments.keys())[i] + ' PDF')
-
-        plt.title('Downlink times')
-        ax.set_xscale("log")
-        ax.set_xlabel('Time [ms]')
-        ax.set_ylabel('Density')
-
-        plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-        plt.show()
+    ax.set_xscale("log")
+    ax.set_xlabel('Time [ms]')
+    ax.set_ylabel('Density')
+    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    plt.show()
 
 
 def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
@@ -176,7 +112,7 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
         data = pd.read_csv('total_frame_stats.csv', index_col=0)
         os.chdir(root_dir)
 
-        stats.append(frames_stats(data, feedback=feedback))
+        stats.append(sample_frame_stats(data, feedback=feedback))
 
     processing_means = [s.processing.mean for s in stats]
     processing_errors = [[s.processing.mean - s.processing.conf_lower
@@ -253,24 +189,9 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     plt.show()
 
 
-def frames_stats(data: pd.DataFrame, feedback: bool = False) -> ExperimentTimes:
-    if feedback:
-        frame_data = data.loc[data['feedback']]
-    else:
-        # filter only frames without feedback
-        frame_data = data.loc[~data['feedback']]
-
-    frame_data['processing'] = \
-        frame_data['server_send'] - frame_data['server_recv']
-    frame_data['uplink'] = \
-        frame_data['server_recv'] - frame_data['client_send']
-    frame_data['downlink'] = \
-        frame_data['client_recv'] - frame_data['server_send']
-
-    # only count frames with positive values (time can't be negative)
-    frame_data = frame_data.loc[frame_data['processing'] > 0]
-    frame_data = frame_data.loc[frame_data['uplink'] > 0]
-    frame_data = frame_data.loc[frame_data['downlink'] > 0]
+def sample_frame_stats(data: pd.DataFrame,
+                       feedback: bool = False) -> ExperimentTimes:
+    frame_data = calculate_derived_metrics(data, feedback)
 
     # if not feedback:
     #     # finally, only consider every 3rd frame for non-feedback frames
@@ -319,6 +240,25 @@ def frames_stats(data: pd.DataFrame, feedback: bool = False) -> ExperimentTimes:
     down_stats = Stats(down_mean, down_std, *down_conf)
 
     return ExperimentTimes(proc_stats, up_stats, down_stats)
+
+
+def calculate_derived_metrics(data, feedback):
+    if feedback:
+        frame_data = data.loc[data['feedback']]
+    else:
+        # filter only frames without feedback
+        frame_data = data.loc[~data['feedback']]
+    frame_data['processing'] = \
+        frame_data['server_send'] - frame_data['server_recv']
+    frame_data['uplink'] = \
+        frame_data['server_recv'] - frame_data['client_send']
+    frame_data['downlink'] = \
+        frame_data['client_recv'] - frame_data['server_send']
+    # only count frames with positive values (time can't be negative)
+    frame_data = frame_data.loc[frame_data['processing'] > 0]
+    frame_data = frame_data.loc[frame_data['uplink'] > 0]
+    frame_data = frame_data.loc[frame_data['downlink'] > 0]
+    return frame_data
 
 
 def plot_cpu_loads(experiments: Dict) -> None:
@@ -380,9 +320,10 @@ if __name__ == '__main__':
 
         plot_avg_times_frames(experiments, feedback=True)
         plot_avg_times_frames(experiments, feedback=False)
+        plot_time_dist(experiments, feedback=True)
+        plot_time_dist(experiments, feedback=False)
 
     # plot_avg_times_runsample(experiments)
     # # plot_avg_times_framesample(experiments)
     # plot_cpu_loads(experiments)
     # plot_ram_usage(experiments)
-    # plot_time_dist(experiments)
