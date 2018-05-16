@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import psutil
 from scipy import stats
+import matplotlib2tikz.save
 
 # n_runs = 25
 CONFIDENCE = 0.95
@@ -89,16 +90,17 @@ def plot_time_dist(experiments: Dict, feedback: bool) -> None:
         ax.plot(bins, pdf,
                 label=exp_name + ' lognorm PDF')
 
-
-    if feedback:
-        plt.title('Processing times for frames w/ feedback')
-    else:
-        plt.title('Processing times for frames w/o feedback')
-
     ax.set_xscale("log")
     ax.set_xlabel('Time [ms]')
     ax.set_ylabel('Density')
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+
+    if feedback:
+        matplotlib2tikz.save('processing_hist_feedback.tex')
+        plt.title('Processing times for frames w/ feedback')
+    else:
+        matplotlib2tikz.save('processing_hist_nofeedback.tex')
+        plt.title('Processing times for frames w/o feedback')
     plt.show()
 
 
@@ -177,15 +179,16 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
 
     # Add xticks on the middle of the group bars
-    if feedback:
-        plt.title('Time statistics for frames w/ feedback')
-    else:
-        plt.title('Time statistics for frames w/o feedback')
     plt.xlabel('Number of clients', fontweight='bold')
     plt.xticks([r + bar_width for r in range(len(experiments))],
                experiments.keys())
 
-    plt.tight_layout()
+    if feedback:
+        matplotlib2tikz.save('times_feedback.tex')
+        plt.title('Time statistics for frames w/ feedback')
+    else:
+        matplotlib2tikz.save('times_nofeedback.tex')
+        plt.title('Time statistics for frames w/o feedback')
     plt.show()
 
 

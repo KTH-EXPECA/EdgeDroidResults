@@ -5,4 +5,4 @@ scipy
 pandas
 psutil
 click
-seaborn
+matplotlib2tikz
