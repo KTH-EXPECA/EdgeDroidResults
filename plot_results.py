@@ -93,13 +93,23 @@ def plot_time_dist(experiments: Dict, feedback: bool) -> None:
     ax.set_xscale("log")
     ax.set_xlabel('Time [ms]')
     ax.set_ylabel('Density')
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    # plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+              ncol=2, mode="expand", borderaxespad=0.)
 
     if feedback:
-        matplotlib2tikz.save('processing_hist_feedback.tex')
+        matplotlib2tikz.save(
+            'processing_hist_feedback.tex',
+            figureheight='\\figureheight',
+            figurewidth='\\figurewidth'
+        )
         plt.title('Processing times for frames w/ feedback')
     else:
-        matplotlib2tikz.save('processing_hist_nofeedback.tex')
+        matplotlib2tikz.save(
+            'processing_hist_nofeedback.tex',
+            figureheight='\\figureheight',
+            figurewidth='\\figurewidth'
+        )
         plt.title('Processing times for frames w/o feedback')
     plt.show()
 
@@ -176,18 +186,28 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     autolabel(ax, rect3)
 
     ax.set_ylabel('Time [ms]')
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    # plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+              ncol=2, mode="expand", borderaxespad=0.)
 
     # Add xticks on the middle of the group bars
-    plt.xlabel('Number of clients', fontweight='bold')
-    plt.xticks([r + bar_width for r in range(len(experiments))],
-               experiments.keys())
+    # ax.set_xlabel('Number of clients', fontweight='bold')
+    ax.set_xticks([r + bar_width for r in range(len(experiments))])
+    ax.set_xticklabels(experiments.keys())
 
     if feedback:
-        matplotlib2tikz.save('times_feedback.tex')
+        matplotlib2tikz.save(
+            'times_feedback.tex',
+            figureheight='\\figureheight',
+            figurewidth='\\figurewidth'
+        )
         plt.title('Time statistics for frames w/ feedback')
     else:
-        matplotlib2tikz.save('times_nofeedback.tex')
+        matplotlib2tikz.save(
+            'times_nofeedback.tex',
+            figureheight='\\figureheight',
+            figurewidth='\\figurewidth'
+        )
         plt.title('Time statistics for frames w/o feedback')
     plt.show()
 
