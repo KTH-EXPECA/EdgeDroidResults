@@ -1,0 +1,36 @@
+{
+  "experiment_id": "LEGOHead_5Client100Benchmark_0.5CPU",
+  "clients": 5,
+  "runs": 100,
+  "steps": 7,
+  "trace_root_url": "https://github.com/molguin92/CognitiveAssistanceTraces/releases/download/LEGOVideo2/",
+  "ntp_server": "130.237.72.211",
+  "max_cpu": 0.5,
+  "ports": [
+    {
+      "video": 60000,
+      "result": 60001,
+      "control": 60002
+    },
+    {
+      "video": 60003,
+      "result": 60004,
+      "control": 60005
+    },
+    {
+      "video": 60006,
+      "result": 60007,
+      "control": 60008
+    },
+    {
+      "video": 60009,
+      "result": 60010,
+      "control": 60011
+    },
+    {
+      "video": 60012,
+      "result": 60013,
+      "control": 60014
+    }
+  ]
+}
