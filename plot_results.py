@@ -261,7 +261,8 @@ def sample_frame_stats(data: pd.DataFrame,
             run_data = frame_data.loc[frame_data['run_id'] == run_id]
             for client_id in range(n_clients):
                 client_data = run_data.loc[run_data['client_id'] == client_id]
-                samples.append(client_data.sample(n=SAMPLE_FACTOR))
+                if len(client_data > SAMPLE_FACTOR):
+                    samples.append(client_data.sample(n=SAMPLE_FACTOR))
 
     samples = pd.concat(samples)
 
@@ -363,9 +364,9 @@ def load_system_data_for_experiment(experiment_id) -> pd.DataFrame:
 if __name__ == '__main__':
     with plt.style.context('ggplot'):
         experiments = {
-            '1 Client'  : '1Client_100Runs',
-            '5 Clients' : '5Clients_100Runs',
-            '10 Clients': '10Clients_100Runs'
+            '1 Client'  : '1Client_100Runs_BadLink',
+            '5 Clients' : '5Clients_100Runs_BadLink',
+            '10 Clients': '10Clients_100Runs_BadLink'
         }
 
         plot_avg_times_frames(experiments, feedback=True)

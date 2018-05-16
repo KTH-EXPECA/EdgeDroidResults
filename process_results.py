@@ -49,6 +49,7 @@ def parse_all_clients_for_run(run_idx, num_clients):
         cdf['run_id'] = run_idx
 
     df = pd.concat(client_dfs, ignore_index=True)
+    df = df.astype(dtype={'run_id': int})
     os.chdir('..')
     return df
 
@@ -115,7 +116,11 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
             print('Ports: ', {'video': video_port, 'result': result_port})
             raise e
 
-    return pd.DataFrame.from_dict(n_data)
+    df = pd.DataFrame.from_dict(n_data)
+    df = df.astype(dtype={'feedback' : bool,
+                          'client_id': int,
+                          'frame_id' : int})
+    return df
 
 
 def load_system_stats_for_run(run_idx):
