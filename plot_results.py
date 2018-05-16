@@ -37,22 +37,19 @@ FEEDBACK_BIN_RANGE = (200, 800)
 NO_FEEDBACK_BIN_RANGE = (10, 200)
 
 
-def autolabel(ax: plt.Axes, rects: List[plt.Rectangle], center=False) -> None:
+def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
+              y_range: Tuple[float, float]) -> None:
     """
     Attach a text label above each bar displaying its height
     """
     for rect in rects:
         height = rect.get_height()
         x_pos = rect.get_x() + rect.get_width() / 2.0
-
-        if center:
-            y_pos = 0.5 * height + rect.get_y() if height >= 5.0 else \
-                rect.get_y()
-        else:
-            y_pos = 1.01 * height + rect.get_y()
+        y_pos = 0.2 * (max(*y_range) - min(*y_range))
         ax.text(x_pos, y_pos,
                 '{:02.2f}'.format(height),
-                ha='center', va='bottom', weight='bold')
+                ha='center', va='bottom', weight='bold',
+                rotation='vertical')
 
 
 def filter_runs(frame_data: pd.DataFrame,
@@ -210,7 +207,7 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
         fmt='none',
         linestyle='none',
         ecolor='darkorange',
-        lw=2, alpha=1.0,
+        lw=4, alpha=1.0,
         capsize=0, capthick=1
     )
 
@@ -246,7 +243,6 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
                        )
 
     rects = (up_bars, proc_bars, down_bars)
-    list(map(lambda r: autolabel(ax, r), rects))  # force eval
     # autolabel(ax, rect1)
     # autolabel(ax, rect2)
     # autolabel(ax, rect3)
@@ -254,8 +250,11 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     ax.set_ylabel('Time [ms]')
 
     if feedback:
+        list(map(lambda r: autolabel(ax, r, FEEDBACK_TIME_RANGE), rects))
+        # force eval
         ax.set_ylim(*FEEDBACK_TIME_RANGE)
     else:
+        list(map(lambda r: autolabel(ax, r, NO_FEEDBACK_TIME_RANGE), rects))
         ax.set_ylim(*NO_FEEDBACK_TIME_RANGE)
 
     # plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
@@ -293,6 +292,7 @@ def sample_frame_stats(f_data: pd.DataFrame,
     frame_data = filter_runs(frame_data, r_data)
 
     u_runs = frame_data['run_id'].unique()
+    adj_sampl_factor = SAMPLE_FACTOR
 
     if feedback:
         samples = [frame_data.loc[frame_data['run_id'] == run_id].sample()
@@ -301,7 +301,6 @@ def sample_frame_stats(f_data: pd.DataFrame,
         # find number of clients
         n_clients = frame_data['client_id'].max() + 1
 
-        adj_sampl_factor = SAMPLE_FACTOR
         while True:
             # take SAMPLE_FACTOR samples per client per run
             samples = []
@@ -330,8 +329,8 @@ def sample_frame_stats(f_data: pd.DataFrame,
         #    samples.append(client_data)
 
     samples = pd.concat(samples)
-
-    print(samples.shape[0])
+    print('Total samples:', samples.shape[0])
+    print('Samples per successful run:', adj_sampl_factor)
 
     # stats for processing times:
     proc_mean = samples['processing'].mean()
@@ -391,11 +390,14 @@ def plot_cpu_loads(experiments: Dict) -> None:
                    for x in experiments.values()]
     cpu_loads = [x['cpu_load'].mean() for x in system_data]
 
+    cpu_range = (0, 100)
+
     fig, ax = plt.subplots()
     rect = ax.bar(experiments.keys(), cpu_loads, label='Average CPU load')
-    autolabel(ax, rect)
+    autolabel(ax, rect, cpu_range)
 
     ax.set_ylabel('Load [%]')
+    ax.set_ylim(*cpu_range)
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
     plt.show()
 
@@ -408,11 +410,13 @@ def plot_ram_usage(experiments: Dict) -> None:
     ram_usage = [(total_mem - x['mem_avail']).mean() for x in system_data]
     ram_usage = [x / float(1024 * 1024 * 1024) for x in ram_usage]
 
+    ram_range = (0, total_mem + 3)
+
     fig, ax = plt.subplots()
     rect = ax.bar(experiments.keys(), ram_usage, label='Average RAM usage')
-    autolabel(ax, rect)
+    autolabel(ax, rect, ram_range)
 
-    # ax.set_ylim([0, total_mem + 3])
+    ax.set_ylim(*ram_range)
     ax.axhline(y=total_mem / float(1024 * 1024 * 1024),
                color='red',
                label='Max. available memory')
