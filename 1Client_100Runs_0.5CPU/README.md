@@ -1,0 +1,11 @@
+# Decreased CPU performance benchmark
+
+- 1 client device
+- Uncongested network
+    -  Network locked to a mostly unused channel (1)
+- 20MHz band
+- 2.4Ghz, 802.11n
+- Backend limited to 50% CPU resources
+    - Locked to 3.4 GHz
+    - No scaling, no turbo boost
+
