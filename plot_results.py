@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 import psutil
 from scipy import stats
-import matplotlib2tikz.save
 
 # n_runs = 25
 CONFIDENCE = 0.95
@@ -27,6 +26,8 @@ ExperimentTimes = NamedTuple('ExperimentTimes',
                              [('processing', Stats),
                               ('uplink', Stats),
                               ('downlink', Stats)])
+
+PLOT_DIM = (8, 3)
 
 
 def autolabel(ax: plt.Axes, rects: List[plt.Rectangle], center=False) -> None:
@@ -97,19 +98,12 @@ def plot_time_dist(experiments: Dict, feedback: bool) -> None:
     ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
               ncol=2, mode="expand", borderaxespad=0.)
 
+    fig.set_size_inches(*PLOT_DIM)
     if feedback:
-        matplotlib2tikz.save(
-            'processing_hist_feedback.tex',
-            figureheight='\\figureheight',
-            figurewidth='\\figurewidth'
-        )
+        fig.savefig('proc_hist_feedback.pdf')
         plt.title('Processing times for frames w/ feedback')
     else:
-        matplotlib2tikz.save(
-            'processing_hist_nofeedback.tex',
-            figureheight='\\figureheight',
-            figurewidth='\\figurewidth'
-        )
+        fig.savefig('proc_hist_nofeedback.pdf')
         plt.title('Processing times for frames w/o feedback')
     plt.show()
 
@@ -195,19 +189,12 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     ax.set_xticks([r + bar_width for r in range(len(experiments))])
     ax.set_xticklabels(experiments.keys())
 
+    fig.set_size_inches(*PLOT_DIM)
     if feedback:
-        matplotlib2tikz.save(
-            'times_feedback.tex',
-            figureheight='\\figureheight',
-            figurewidth='\\figurewidth'
-        )
+        fig.savefig('times_feedback.pdf')
         plt.title('Time statistics for frames w/ feedback')
     else:
-        matplotlib2tikz.save(
-            'times_nofeedback.tex',
-            figureheight='\\figureheight',
-            figurewidth='\\figurewidth'
-        )
+        fig.savefig('times_nofeedback.pdf')
         plt.title('Time statistics for frames w/o feedback')
     plt.show()
 
