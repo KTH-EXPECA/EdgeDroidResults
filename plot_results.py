@@ -28,7 +28,12 @@ ExperimentTimes = NamedTuple('ExperimentTimes',
                               ('uplink', Stats),
                               ('downlink', Stats)])
 
-PLOT_DIM = (8, 3)
+PLOT_DIM = (4, 3)
+FEEDBACK_TIME_RANGE = (0, 600)
+NO_FEEDBACK_TIME_RANGE = (0, 100)
+
+FEEDBACK_BIN_RANGE = (200, 800)
+NO_FEEDBACK_BIN_RANGE = (10, 200)
 
 
 def autolabel(ax: plt.Axes, rects: List[plt.Rectangle], center=False) -> None:
@@ -49,6 +54,26 @@ def autolabel(ax: plt.Axes, rects: List[plt.Rectangle], center=False) -> None:
                 ha='center', va='bottom', weight='bold')
 
 
+def filter_runs(frame_data: pd.DataFrame,
+                run_data: pd.DataFrame) -> pd.DataFrame:
+    n_runs = run_data['run_id'].max() + 1
+    n_clients = run_data['client_id'].max() + 1
+
+    samples = []
+    for run in range(n_runs):
+        for client in range(n_clients):
+            success = run_data.loc[run_data['run_id'] == run]
+            success = success.loc[success['client_id'] == client]
+            success = success.iloc[0]['success']
+
+            if success:
+                d = frame_data.loc[frame_data['run_id'] == run]
+                d = d.loc[d['client_id'] == client]
+                samples.append(d)
+
+    return pd.concat(samples)
+
+
 def plot_time_dist(experiments: Dict, feedback: bool) -> None:
     root_dir = os.getcwd()
     results = {}
@@ -56,29 +81,41 @@ def plot_time_dist(experiments: Dict, feedback: bool) -> None:
     for exp_name, exp_dir in experiments.items():
         os.chdir(root_dir + '/' + exp_dir)
         data = pd.read_csv('total_frame_stats.csv')
+        run_data = pd.read_csv('total_run_stats.csv')
         os.chdir(root_dir)
 
         data = calculate_derived_metrics(data, feedback)
+        data = filter_runs(data, run_data)
+
         results[exp_name] = data
 
-    bin_min = min(map(
-        operator.methodcaller('min'),
-        map(
-            operator.itemgetter('processing'),
-            results.values()
-        )
-    ))
-
-    bin_max = max(map(
-        operator.methodcaller('max'),
-        map(
-            operator.itemgetter('processing'),
-            results.values()
-        )
-    ))
+    # bin_min = min(map(
+    #     operator.methodcaller('min'),
+    #     map(
+    #         operator.itemgetter('processing'),
+    #         results.values()
+    #     )
+    # ))
+    #
+    # bin_max = max(map(
+    #     operator.methodcaller('max'),
+    #     map(
+    #         operator.itemgetter('processing'),
+    #         results.values()
+    #     )
+    # ))
 
     fig, ax = plt.subplots()
-    bins = np.logspace(np.log10(bin_min), np.log10(bin_max), 30)
+    # bins = np.logspace(np.log10(bin_min), np.log10(bin_max), 30)
+
+    if feedback:
+        bins = np.logspace(np.log10(FEEDBACK_BIN_RANGE[0]),
+                           np.log10(FEEDBACK_BIN_RANGE[1]),
+                           30)
+    else:
+        bins = np.logspace(np.log10(NO_FEEDBACK_BIN_RANGE[0]),
+                           np.log10(NO_FEEDBACK_BIN_RANGE[1]),
+                           30)
 
     hists = []
     pdfs = []
@@ -134,10 +171,13 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
 
     for exp_dir in experiments.values():
         os.chdir(root_dir + '/' + exp_dir)
-        data = pd.read_csv('total_frame_stats.csv', index_col=0)
+        frame_data = pd.read_csv('total_frame_stats.csv', index_col=0)
+        run_data = pd.read_csv('total_run_stats.csv')
         os.chdir(root_dir)
 
-        stats.append(sample_frame_stats(data, feedback=feedback))
+        stats.append(sample_frame_stats(frame_data,
+                                        run_data,
+                                        feedback=feedback))
 
     processing_means = [s.processing.mean for s in stats]
     processing_errors = [[s.processing.mean - s.processing.conf_lower
@@ -211,14 +251,20 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     # autolabel(ax, rect3)
 
     ax.set_ylabel('Time [ms]')
+
+    if feedback:
+        ax.set_ylim(*FEEDBACK_TIME_RANGE)
+    else:
+        ax.set_ylim(*NO_FEEDBACK_TIME_RANGE)
+
     # plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
     # ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
     #           ncol=2, mode="expand", borderaxespad=0.)
 
-    figlegend = pylab.figure(figsize=(6, 0.5))
+    figlegend = pylab.figure(figsize=(3, 1))
     figlegend.legend((up_err, *rects),
                      (up_err.get_label(), *(r.get_label() for r in rects)),
-                     loc='center', mode='expand', ncol=2)
+                     loc='center', mode='expand')
     figlegend.tight_layout()
     figlegend.savefig('times_legend.pdf', transparent=True,
                       bbox_inches='tight', pad_inches=0)
@@ -239,30 +285,29 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     plt.show()
 
 
-def sample_frame_stats(data: pd.DataFrame,
+def sample_frame_stats(f_data: pd.DataFrame,
+                       r_data: pd.DataFrame,
                        feedback: bool = False) -> ExperimentTimes:
-    frame_data = calculate_derived_metrics(data, feedback)
+    frame_data = calculate_derived_metrics(f_data, feedback)
+    frame_data = filter_runs(frame_data, r_data)
 
-    # if not feedback:
-    #     # finally, only consider every 3rd frame for non-feedback frames
-    #     frame_data = frame_data.iloc[::3, :]
-
-    n_runs = frame_data['run_id'].max() + 1
+    u_runs = frame_data['run_id'].unique()
 
     if feedback:
         samples = [frame_data.loc[frame_data['run_id'] == run_id].sample()
-                   for run_id in range(n_runs)]
+                   for run_id in u_runs]
     else:
         # find number of clients
         n_clients = frame_data['client_id'].max() + 1
         # take SAMPLE_FACTOR samples per client per run
         samples = []
-        for run_id in range(n_runs):
+        for run_id in u_runs:
             run_data = frame_data.loc[frame_data['run_id'] == run_id]
             for client_id in range(n_clients):
                 client_data = run_data.loc[run_data['client_id'] == client_id]
-                if client_data.shape[0] >= SAMPLE_FACTOR:
-                    samples.append(client_data.sample(n=SAMPLE_FACTOR))
+                samples.append(client_data.sample(n=SAMPLE_FACTOR))
+                # if client_data.shape[0] >= SAMPLE_FACTOR:
+                #     samples.append(client_data.sample(n=SAMPLE_FACTOR))
                 # else:
                 #    samples.append(client_data)
 
@@ -271,25 +316,32 @@ def sample_frame_stats(data: pd.DataFrame,
     # stats for processing times:
     proc_mean = samples['processing'].mean()
     proc_std = samples['processing'].std()
-    proc_conf = stats.norm.interval(CONFIDENCE,
-                                    loc=proc_mean,
-                                    scale=proc_std / math.sqrt(n_runs))
+    proc_conf = stats.norm.interval(
+        CONFIDENCE,
+        loc=proc_mean,
+        scale=proc_std / math.sqrt(samples.shape[0])
+    )
+
     proc_stats = Stats(proc_mean, proc_std, *proc_conf)
 
     # stats for uplink times:
     up_mean = samples['uplink'].mean()
     up_std = samples['uplink'].std()
-    up_conf = stats.norm.interval(CONFIDENCE,
-                                  loc=up_mean,
-                                  scale=up_std / math.sqrt(n_runs))
+    up_conf = stats.norm.interval(
+        CONFIDENCE,
+        loc=up_mean,
+        scale=up_std / math.sqrt(samples.shape[0])
+    )
     up_stats = Stats(up_mean, up_std, *up_conf)
 
     # stats for downlink times:
     down_mean = samples['downlink'].mean()
     down_std = samples['downlink'].std()
-    down_conf = stats.norm.interval(CONFIDENCE,
-                                    loc=down_mean,
-                                    scale=down_std / math.sqrt(n_runs))
+    down_conf = stats.norm.interval(
+        CONFIDENCE,
+        loc=down_mean,
+        scale=down_std / math.sqrt(samples.shape[0])
+    )
     down_stats = Stats(down_mean, down_std, *down_conf)
 
     return ExperimentTimes(proc_stats, up_stats, down_stats)
@@ -363,20 +415,41 @@ def load_system_data_for_experiment(experiment_id) -> pd.DataFrame:
     return df
 
 
+def print_successful_runs(experiments):
+    for exp_name, exp_id in experiments.items():
+        os.chdir(exp_id)
+        df = pd.read_csv('total_run_stats.csv')
+        os.chdir('..')
+
+        print(exp_name)
+        n_clients = df['client_id'].max() + 1
+        total_runs = df['run_id'].max() + 1
+        for c in range(n_clients):
+            client_runs = df.loc[df['client_id'] == c]
+            success_runs = client_runs.loc[client_runs['success']].shape[0]
+            print('Client {}: \t {} out of {} runs'
+                  .format(c, success_runs, total_runs))
+
+
 if __name__ == '__main__':
     with plt.style.context('ggplot'):
         experiments = {
-            '1 Client'  : '1Client_100Runs_BadLink',
-            '5 Clients' : '5Clients_100Runs_BadLink',
-            '10 Clients': '10Clients_100Runs_BadLink'
+            '1 Client'  : '1Client_100Runs',
+            '5 Clients' : '5Clients_100Runs',
+            '10 Clients': '10Clients_100Runs'
         }
+
+        os.chdir('1Client_100Runs_BadLink')
+        frame_data = pd.read_csv('total_frame_stats.csv')
+        run_data = pd.read_csv('total_run_stats.csv')
+        os.chdir('..')
+
+        print_successful_runs(experiments)
 
         plot_avg_times_frames(experiments, feedback=True)
         plot_avg_times_frames(experiments, feedback=False)
         plot_time_dist(experiments, feedback=True)
         plot_time_dist(experiments, feedback=False)
-
-
 
     # plot_avg_times_runsample(experiments)
     # # plot_avg_times_framesample(experiments)
