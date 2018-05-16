@@ -261,8 +261,10 @@ def sample_frame_stats(data: pd.DataFrame,
             run_data = frame_data.loc[frame_data['run_id'] == run_id]
             for client_id in range(n_clients):
                 client_data = run_data.loc[run_data['client_id'] == client_id]
-                if len(client_data > SAMPLE_FACTOR):
+                if client_data.shape[0] >= SAMPLE_FACTOR:
                     samples.append(client_data.sample(n=SAMPLE_FACTOR))
+                # else:
+                #    samples.append(client_data)
 
     samples = pd.concat(samples)
 
@@ -373,6 +375,8 @@ if __name__ == '__main__':
         plot_avg_times_frames(experiments, feedback=False)
         plot_time_dist(experiments, feedback=True)
         plot_time_dist(experiments, feedback=False)
+
+
 
     # plot_avg_times_runsample(experiments)
     # # plot_avg_times_framesample(experiments)

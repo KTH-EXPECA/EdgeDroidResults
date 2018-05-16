@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+from collections import namedtuple
 from multiprocessing.pool import Pool
 
 import click
@@ -150,7 +151,59 @@ def load_system_stats_for_run(run_idx):
     return df
 
 
-@click.command()
+def get_run_status(client_id, run_id):
+    os.chdir('run_{}'.format(run_id + 1))
+    print('Loading run results for client {}, run {}'.format(client_id, run_id))
+    data = load_results(client_id)
+
+    status = dict(
+        client_id=client_id,
+        run_id=run_id,
+        start=data['run_results']['init'],
+        end=data['run_results']['end'],
+        success=data['run_results']['success']
+    )
+    os.chdir('..')
+    return status
+
+
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+@click.argument('experiment_id',
+                type=click.Path(dir_okay=True, file_okay=False, exists=True))
+@click.argument('n_clients', type=int)
+@click.argument('n_runs', type=int)
+def prepare_task_stats(experiment_id, n_clients, n_runs):
+    os.chdir(experiment_id)
+
+    combinations = []
+    for c in range(n_clients):
+        for r in range(n_runs):
+            combinations.append((c, r))
+
+    with Pool(min(6, n_runs)) as pool:
+        data = pool.starmap(get_run_status, combinations)
+
+    df = pd.DataFrame(data)
+    df = df.astype(
+        dtype={
+            'client_id': int,
+            'run_id'   : int,
+            'start'    : float,
+            'end'      : float,
+            'success'  : bool
+        }
+    )
+
+    df.to_csv('total_run_stats.csv')
+    os.chdir('..')
+
+
+@cli.command()
 @click.argument('experiment_id',
                 type=click.Path(dir_okay=True, file_okay=False, exists=True))
 @click.argument('n_clients', type=int)
@@ -199,4 +252,4 @@ def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
 
 
 if __name__ == '__main__':
-    prepare_client_stats()
+    cli()
