@@ -106,7 +106,7 @@ def plot_time_dist(experiments: Dict, feedback: bool) -> None:
                      mode='expand',
                      ncol=2)
     figlegend.tight_layout()
-    figlegend.savefig('proc_dist_legend.pdf', transparent=True,
+    figlegend.savefig('proc_hist_legend.pdf', transparent=True,
                       bbox_inches='tight', pad_inches=0)
     figlegend.show()
 
