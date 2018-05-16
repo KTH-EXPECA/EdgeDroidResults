@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import psutil
+from matplotlib import pylab
 from scipy import stats
-import matplotlib2tikz.save
 
 # n_runs = 25
 CONFIDENCE = 0.95
@@ -27,6 +27,8 @@ ExperimentTimes = NamedTuple('ExperimentTimes',
                              [('processing', Stats),
                               ('uplink', Stats),
                               ('downlink', Stats)])
+
+PLOT_DIM = (8, 3)
 
 
 def autolabel(ax: plt.Axes, rects: List[plt.Rectangle], center=False) -> None:
@@ -78,28 +80,49 @@ def plot_time_dist(experiments: Dict, feedback: bool) -> None:
     fig, ax = plt.subplots()
     bins = np.logspace(np.log10(bin_min), np.log10(bin_max), 30)
 
+    hists = []
+    pdfs = []
     for exp_name, data in results.items():
-        ax.hist(data['processing'], bins,
-                label=exp_name,
-                # norm_hist=True
-                alpha=0.5,
-                density=True)
+        hists.append(ax.hist(data['processing'], bins,
+                             label=exp_name,
+                             # norm_hist=True
+                             alpha=0.5,
+                             density=True)[-1])
 
         shape, loc, scale = stats.lognorm.fit(data['processing'])
         pdf = stats.lognorm.pdf(bins, shape, loc, scale)
-        ax.plot(bins, pdf,
-                label=exp_name + ' lognorm PDF')
+        pdfs.append(*ax.plot(bins, pdf,
+                             label=exp_name + ' lognorm PDF'))
+
+    figlegend = pylab.figure(figsize=(3, 0.8))
+    plots = (*(h[0] for h in hists), *pdfs)
+    labels = (
+        *(exp_name for exp_name, _ in results.items()),
+        *(exp_name + ' PDF' for exp_name, _ in results.items())
+    )
+    figlegend.legend(plots,
+                     labels,
+                     loc='center',
+                     mode='expand',
+                     ncol=2)
+    figlegend.tight_layout()
+    figlegend.savefig('proc_hist_legend.pdf', transparent=True,
+                      bbox_inches='tight', pad_inches=0)
+    figlegend.show()
 
     ax.set_xscale("log")
     ax.set_xlabel('Time [ms]')
     ax.set_ylabel('Density')
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    # plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    # ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+    #          ncol=2, mode="expand", borderaxespad=0.)
 
+    fig.set_size_inches(*PLOT_DIM)
     if feedback:
-        matplotlib2tikz.save('processing_hist_feedback.tex')
+        fig.savefig('proc_hist_feedback.pdf', bbox_inches='tight')
         plt.title('Processing times for frames w/ feedback')
     else:
-        matplotlib2tikz.save('processing_hist_nofeedback.tex')
+        fig.savefig('proc_hist_nofeedback.pdf', bbox_inches='tight')
         plt.title('Processing times for frames w/o feedback')
     plt.show()
 
@@ -143,51 +166,75 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     r3 = [x + bar_width for x in r2]
 
     errorbar_opts = dict(
+        fmt='none',
+        linestyle='none',
         ecolor='darkorange',
         lw=2, alpha=1.0,
         capsize=0, capthick=1
     )
 
     fig, ax = plt.subplots()
-    rect1 = ax.bar(r1, uplink_means,
-                   label='Avg. uplink time',
-                   yerr=uplink_errors,
-                   width=bar_width,
-                   edgecolor='white',
-                   error_kw=dict(errorbar_opts, label='95% Confidence Int.')
-                   )
-    rect2 = ax.bar(r2, processing_means,
-                   label='Avg. processing time',
-                   yerr=processing_errors,
-                   width=bar_width,
-                   edgecolor='white',
-                   error_kw=errorbar_opts
-                   )
-    rect3 = ax.bar(r3, downlink_means,
-                   label='Avg. downlink time',
-                   yerr=downlink_errors,
-                   width=bar_width,
-                   edgecolor='white',
-                   error_kw=errorbar_opts
-                   )
+    up_err = ax.errorbar(r1, uplink_means, yerr=uplink_errors,
+                         **errorbar_opts, label='95% Confidence Interval')
+    proc_err = ax.errorbar(r2, processing_means, yerr=processing_errors,
+                           **errorbar_opts)
+    down_err = ax.errorbar(r3, downlink_means, yerr=downlink_errors,
+                           **errorbar_opts)
 
-    autolabel(ax, rect1)
-    autolabel(ax, rect2)
-    autolabel(ax, rect3)
+    up_bars = ax.bar(r1, uplink_means,
+                     label='Average uplink time',
+                     # yerr=uplink_errors,
+                     width=bar_width,
+                     edgecolor='white',
+                     # error_kw=dict(errorbar_opts, label='95% Confidence
+                     # Interval')
+                     )
+    proc_bars = ax.bar(r2, processing_means,
+                       label='Average processing time',
+                       # yerr=processing_errors,
+                       width=bar_width,
+                       edgecolor='white',
+                       # error_kw=errorbar_opts
+                       )
+    down_bars = ax.bar(r3, downlink_means,
+                       label='Average downlink time',
+                       # yerr=downlink_errors,
+                       width=bar_width,
+                       edgecolor='white',
+                       # error_kw=errorbar_opts
+                       )
+
+    rects = (up_bars, proc_bars, down_bars)
+    list(map(lambda r: autolabel(ax, r), rects))  # force eval
+    # autolabel(ax, rect1)
+    # autolabel(ax, rect2)
+    # autolabel(ax, rect3)
 
     ax.set_ylabel('Time [ms]')
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    # plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    # ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+    #           ncol=2, mode="expand", borderaxespad=0.)
+
+    figlegend = pylab.figure(figsize=(6, 0.5))
+    figlegend.legend((up_err, *rects),
+                     (up_err.get_label(), *(r.get_label() for r in rects)),
+                     loc='center', mode='expand', ncol=2)
+    figlegend.tight_layout()
+    figlegend.savefig('times_legend.pdf', transparent=True,
+                      bbox_inches='tight', pad_inches=0)
+    figlegend.show()
 
     # Add xticks on the middle of the group bars
-    plt.xlabel('Number of clients', fontweight='bold')
-    plt.xticks([r + bar_width for r in range(len(experiments))],
-               experiments.keys())
+    # ax.set_xlabel('Number of clients', fontweight='bold')
+    ax.set_xticks([r + bar_width for r in range(len(experiments))])
+    ax.set_xticklabels(experiments.keys())
 
+    fig.set_size_inches(*PLOT_DIM)
     if feedback:
-        matplotlib2tikz.save('times_feedback.tex')
+        fig.savefig('times_feedback.pdf', bbox_inches='tight')
         plt.title('Time statistics for frames w/ feedback')
     else:
-        matplotlib2tikz.save('times_nofeedback.tex')
+        fig.savefig('times_nofeedback.pdf', bbox_inches='tight')
         plt.title('Time statistics for frames w/o feedback')
     plt.show()
 

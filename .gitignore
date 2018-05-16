@@ -166,3 +166,4 @@ fabric.properties
 
 # generated tex files
 *.tex
+*.pdf
