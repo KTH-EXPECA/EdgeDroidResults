@@ -37,6 +37,10 @@ FEEDBACK_BIN_RANGE = (200, 800)
 NO_FEEDBACK_BIN_RANGE = (10, 200)
 
 
+# HIST_FEEDBACK_YRANGE = (0, 0.025)
+# HIST_NO_FEEDBACK_YRANGE = (0, 0.12)
+
+
 def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
               y_range: Tuple[float, float],
               bottom: bool = False,
@@ -165,9 +169,11 @@ def plot_time_dist(experiments: Dict, feedback: bool) -> None:
 
     fig.set_size_inches(*PLOT_DIM)
     if feedback:
+        # ax.set_ylim(*HIST_FEEDBACK_YRANGE)
         fig.savefig('proc_hist_feedback.pdf', bbox_inches='tight')
         plt.title('Processing times for frames w/ feedback')
     else:
+        # ax.set_ylim(*HIST_NO_FEEDBACK_YRANGE)
         fig.savefig('proc_hist_nofeedback.pdf', bbox_inches='tight')
         plt.title('Processing times for frames w/o feedback')
     plt.show()
@@ -272,7 +278,7 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     # ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
     #           ncol=2, mode="expand", borderaxespad=0.)
 
-    figlegend = pylab.figure(figsize=(3, 1))
+    figlegend = pylab.figure(figsize=(3, 2))
     figlegend.legend((up_err, *rects),
                      (up_err.get_label(), *(r.get_label() for r in rects)),
                      loc='center', mode='expand')
@@ -550,22 +556,22 @@ def print_successful_runs(experiments):
 if __name__ == '__main__':
     with plt.style.context('ggplot'):
         experiments = {
-            '1 Client'  : '1Client_100Runs',
-            '5 Clients' : '5Clients_100Runs',
-            '10 Clients': '10Clients_100Runs'
+            'Base'         : '10Clients_100Runs',
+            'Impaired\nWiFi': '10Clients_100Runs_BadLink',
+            'Impaired\nCPU' : '10Clients_100Runs_0.5CPU'
         }
 
-        os.chdir('1Client_100Runs_BadLink')
-        frame_data = pd.read_csv('total_frame_stats.csv')
-        run_data = pd.read_csv('total_run_stats.csv')
-        os.chdir('..')
+        # os.chdir('1Client_100Runs_BadLink')
+        # frame_data = pd.read_csv('total_frame_stats.csv')
+        # run_data = pd.read_csv('total_run_stats.csv')
+        # os.chdir('..')
 
         # print_successful_runs(experiments)
-        #
-        # plot_avg_times_frames(experiments, feedback=True)
-        # plot_avg_times_frames(experiments, feedback=False)
-        # plot_time_dist(experiments, feedback=True)
-        # plot_time_dist(experiments, feedback=False)
+
+        plot_avg_times_frames(experiments, feedback=True)
+        plot_avg_times_frames(experiments, feedback=False)
+        plot_time_dist(experiments, feedback=True)
+        plot_time_dist(experiments, feedback=False)
 
         plot_cpu_loads(experiments)
         plot_ram_usage(experiments)
