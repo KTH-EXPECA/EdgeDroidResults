@@ -38,18 +38,26 @@ NO_FEEDBACK_BIN_RANGE = (10, 200)
 
 
 def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
-              y_range: Tuple[float, float]) -> None:
+              y_range: Tuple[float, float],
+              bottom: bool = False) -> None:
     """
     Attach a text label above each bar displaying its height
     """
     for rect in rects:
         height = rect.get_height()
         x_pos = rect.get_x() + rect.get_width() / 2.0
-        y_pos = 0.2 * (max(*y_range) - min(*y_range))
-        ax.text(x_pos, y_pos,
-                '{:02.2f}'.format(height),
-                ha='center', va='bottom', weight='bold',
-                rotation='vertical')
+
+        if not bottom:
+            y_pos = 0.2 * (max(*y_range) - min(*y_range))
+            ax.text(x_pos, y_pos,
+                    '{:02.2f}'.format(height),
+                    ha='center', va='bottom', weight='bold',
+                    rotation='vertical')
+        else:
+            y_pos = rect.get_y()
+            ax.text(x_pos, y_pos,
+                    '{:02.2f}'.format(height),
+                    ha='center', va='bottom', weight='bold')
 
 
 def filter_runs(frame_data: pd.DataFrame,
@@ -386,19 +394,56 @@ def calculate_derived_metrics(data, feedback):
 
 
 def plot_cpu_loads(experiments: Dict) -> None:
-    system_data = [load_system_data_for_experiment(x)
-                   for x in experiments.values()]
-    cpu_loads = [x['cpu_load'].mean() for x in system_data]
+    # system_data = [load_system_data_for_experiment(x)
+    #                for x in experiments.values()]
+    system_data_samples = []
+    for exp_name, exp_dir in experiments.items():
+        data = load_system_data_for_experiment(exp_dir)
+        runs = data['run'].unique()
+        samples = []
+        for run in runs:
+            df = data.loc[data['run'] == run]
+            samples.append(df.sample(n=2 * SAMPLE_FACTOR))
+        system_data_samples.append(pd.concat(samples))
+
+    cpu_means = [x['cpu_load'].mean() for x in system_data_samples]
+    cpu_stds = [x['cpu_load'].std() for x in system_data_samples]
+    cpu_count = [x.shape[0] for x in system_data_samples]
+
+    cpu_confs = [
+        stats.norm.interval(
+            CONFIDENCE,
+            loc=mean,
+            scale=std / math.sqrt(count)
+        )
+        for mean, std, count in zip(cpu_means, cpu_stds, cpu_count)
+    ]
+
+    err = [
+        [mean - x[0] for mean, x in zip(cpu_means, cpu_confs)],
+        [x[1] - mean for mean, x in zip(cpu_means, cpu_confs)]
+    ]
 
     cpu_range = (0, 100)
 
     fig, ax = plt.subplots()
-    rect = ax.bar(experiments.keys(), cpu_loads, label='Average CPU load')
-    autolabel(ax, rect, cpu_range)
+    rect = ax.bar(experiments.keys(), cpu_means, label='Average CPU load')
+    ax.errorbar(experiments.keys(), cpu_means, yerr=err,
+                fmt='none',
+                linestyle='none',
+                ecolor='darkblue',
+                lw=10, alpha=1.0,
+                capsize=0, capthick=1, label='95% Confidence Interval')
+
+    autolabel(ax, rect, cpu_range, bottom=True)
 
     ax.set_ylabel('Load [%]')
     ax.set_ylim(*cpu_range)
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    ax.legend(loc='upper left')
+    # plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+
+    fig.set_size_inches(*PLOT_DIM)
+    fig.savefig('cpu_load.pdf', bbox_inches='tight')
     plt.show()
 
 
@@ -406,18 +451,22 @@ def plot_ram_usage(experiments: Dict) -> None:
     system_data = [load_system_data_for_experiment(x)
                    for x in experiments.values()]
 
-    total_mem = psutil.virtual_memory().total
-    ram_usage = [(total_mem - x['mem_avail']).mean() for x in system_data]
-    ram_usage = [x / float(1024 * 1024 * 1024) for x in ram_usage]
+    # total_mem = psutil.virtual_memory().total
+    conv_factor = float(1024 * 1024 * 1024)  # MiB to GiB
 
+    total_mem = 32 * float(1024 * 1024 * 1024)
+    ram_usage = [(total_mem - x['mem_avail']).mean() for x in system_data]
+    ram_usage = [x / conv_factor for x in ram_usage]
+
+    total_mem = total_mem / conv_factor  # convert to GiB
     ram_range = (0, total_mem + 3)
 
     fig, ax = plt.subplots()
     rect = ax.bar(experiments.keys(), ram_usage, label='Average RAM usage')
-    autolabel(ax, rect, ram_range)
+    autolabel(ax, rect, ram_range, bottom=True)
 
     ax.set_ylim(*ram_range)
-    ax.axhline(y=total_mem / float(1024 * 1024 * 1024),
+    ax.axhline(y=total_mem,
                color='red',
                label='Max. available memory')
     ax.set_ylabel('Usage [GiB]')
@@ -458,9 +507,9 @@ def print_successful_runs(experiments):
 if __name__ == '__main__':
     with plt.style.context('ggplot'):
         experiments = {
-            '1 Client'  : '1Client_100Runs_0.5CPU',
-            '5 Clients' : '5Clients_100Runs_0.5CPU',
-            '10 Clients': '10Clients_100Runs_0.5CPU'
+            '1 Client'  : '1Client_100Runs',
+            '5 Clients' : '5Clients_100Runs',
+            '10 Clients': '10Clients_100Runs'
         }
 
         os.chdir('1Client_100Runs_BadLink')
@@ -468,14 +517,12 @@ if __name__ == '__main__':
         run_data = pd.read_csv('total_run_stats.csv')
         os.chdir('..')
 
-        print_successful_runs(experiments)
+        # print_successful_runs(experiments)
+        #
+        # plot_avg_times_frames(experiments, feedback=True)
+        # plot_avg_times_frames(experiments, feedback=False)
+        # plot_time_dist(experiments, feedback=True)
+        # plot_time_dist(experiments, feedback=False)
 
-        plot_avg_times_frames(experiments, feedback=True)
-        plot_avg_times_frames(experiments, feedback=False)
-        plot_time_dist(experiments, feedback=True)
-        plot_time_dist(experiments, feedback=False)
-
-    # plot_avg_times_runsample(experiments)
-    # # plot_avg_times_framesample(experiments)
-    # plot_cpu_loads(experiments)
-    # plot_ram_usage(experiments)
+        plot_cpu_loads(experiments)
+        plot_ram_usage(experiments)
