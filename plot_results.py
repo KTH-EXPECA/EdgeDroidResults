@@ -1,17 +1,10 @@
-import itertools
 import json
-import math
-import operator
 import os
-from statistics import mean
-from typing import Dict, List, Tuple, NamedTuple
-from collections import namedtuple
+from typing import Dict, List, Tuple
+
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import psutil
 from matplotlib import pylab
-from scipy import stats
 
 from util import *
 
@@ -154,34 +147,34 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
 
     for exp_dir in experiments.values():
         os.chdir(root_dir + '/' + exp_dir)
-        frame_data = pd.read_csv('total_frame_stats.csv', index_col=0)
-        run_data = pd.read_csv('total_run_stats.csv')
+        filename = 'sampled_time_stats_feedback.json' \
+            if feedback else 'sampled_time_stats_nofeedback.json'
+        with open(filename, 'r') as f:
+            sampled_data = json.load(f)
         os.chdir(root_dir)
 
-        stats.append(sample_frame_stats(frame_data,
-                                        run_data,
-                                        feedback=feedback))
+        stats.append(sampled_data)
 
-    processing_means = [s.processing.mean for s in stats]
-    processing_errors = [[s.processing.mean - s.processing.conf_lower
-                          for s in stats],
-                         [s.processing.conf_upper -
-                          s.processing.mean
-                          for s in stats]]
+    processing_means = [s['processing']['mean'] for s in stats]
+    processing_errors = [
+        [s['processing']['mean'] - s['processing']['conf_lower']
+         for s in stats],
+        [s['processing']['conf_upper'] - s['processing']['mean']
+         for s in stats]]
 
-    uplink_means = [s.uplink.mean for s in stats]
-    uplink_errors = [[s.uplink.mean - s.uplink.conf_lower
-                      for s in stats],
-                     [s.uplink.conf_upper -
-                      s.uplink.mean
-                      for s in stats]]
+    uplink_means = [s['uplink']['mean'] for s in stats]
+    uplink_errors = [
+        [s['uplink']['mean'] - s['uplink']['conf_lower']
+         for s in stats],
+        [s['uplink']['conf_upper'] - s['uplink']['mean']
+         for s in stats]]
 
-    downlink_means = [s.downlink.mean for s in stats]
-    downlink_errors = [[s.downlink.mean - s.downlink.conf_lower
-                        for s in stats],
-                       [s.downlink.conf_upper -
-                        s.downlink.mean
-                        for s in stats]]
+    downlink_means = [s['downlink']['mean'] for s in stats]
+    downlink_errors = [
+        [s['downlink']['mean'] - s['downlink']['conf_lower']
+         for s in stats],
+        [s['downlink']['conf_upper'] - s['downlink']['mean']
+         for s in stats]]
 
     bar_width = 0.3
     r1 = np.arange(len(experiments))
@@ -268,87 +261,6 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
         fig.savefig('times_nofeedback.pdf', bbox_inches='tight')
         plt.title('Time statistics for frames w/o feedback')
     plt.show()
-
-
-def sample_frame_stats(f_data: pd.DataFrame,
-                       r_data: pd.DataFrame,
-                       feedback: bool = False) -> ExperimentTimes:
-    frame_data = calculate_derived_metrics(f_data, feedback)
-    frame_data = filter_runs(frame_data, r_data)
-
-    u_runs = frame_data['run_id'].unique()
-    adj_sampl_factor = SAMPLE_FACTOR
-
-    if feedback:
-        samples = [frame_data.loc[frame_data['run_id'] == run_id].sample()
-                   for run_id in u_runs]
-    else:
-        # find number of clients
-        n_clients = frame_data['client_id'].max() + 1
-
-        while True:
-            # take SAMPLE_FACTOR samples per client per run
-            samples = []
-            for run_id in u_runs:
-                run_data = frame_data.loc[frame_data['run_id'] == run_id]
-                for client_id in range(n_clients):
-                    client_data = run_data.loc[
-                        run_data['client_id'] == client_id]
-
-                    if not client_data.empty:
-                        if adj_sampl_factor <= client_data.shape[0]:
-                            samples.append(
-                                client_data.sample(n=adj_sampl_factor)
-                            )
-                        else:
-                            samples.append(client_data)
-
-            if sum(map(lambda s: s.shape[0], samples)) > MIN_SAMPLES:
-                break
-            else:
-                adj_sampl_factor += SAMPLE_FACTOR
-
-        # if client_data.shape[0] >= SAMPLE_FACTOR:
-        #     samples.append(client_data.sample(n=SAMPLE_FACTOR))
-        # else:
-        #    samples.append(client_data)
-
-    samples = pd.concat(samples)
-    print('Total samples:', samples.shape[0])
-    print('Samples per successful run:', adj_sampl_factor)
-
-    # stats for processing times:
-    proc_mean = samples['processing'].mean()
-    proc_std = samples['processing'].std()
-    proc_conf = stats.norm.interval(
-        CONFIDENCE,
-        loc=proc_mean,
-        scale=proc_std / math.sqrt(samples.shape[0])
-    )
-
-    proc_stats = Stats(proc_mean, proc_std, *proc_conf)
-
-    # stats for uplink times:
-    up_mean = samples['uplink'].mean()
-    up_std = samples['uplink'].std()
-    up_conf = stats.norm.interval(
-        CONFIDENCE,
-        loc=up_mean,
-        scale=up_std / math.sqrt(samples.shape[0])
-    )
-    up_stats = Stats(up_mean, up_std, *up_conf)
-
-    # stats for downlink times:
-    down_mean = samples['downlink'].mean()
-    down_std = samples['downlink'].std()
-    down_conf = stats.norm.interval(
-        CONFIDENCE,
-        loc=down_mean,
-        scale=down_std / math.sqrt(samples.shape[0])
-    )
-    down_stats = Stats(down_mean, down_std, *down_conf)
-
-    return ExperimentTimes(proc_stats, up_stats, down_stats)
 
 
 def plot_cpu_loads(experiments: Dict) -> None:
@@ -509,6 +421,12 @@ if __name__ == '__main__':
             'Impaired\nWiFi': '10Clients_100Runs_BadLink',
             'Impaired\nCPU' : '10Clients_100Runs_0.5CPU'
         }
+
+        # experiments = {
+        #     '1 Client'  : '1Client_100Runs',
+        #     '5 Clients' : '5Clients_100Runs',
+        #     '10 Clients': '10Clients_100Runs'
+        # }
 
         # os.chdir('1Client_100Runs_BadLink')
         # frame_data = pd.read_csv('total_frame_stats.csv')
