@@ -39,7 +39,8 @@ NO_FEEDBACK_BIN_RANGE = (10, 200)
 
 def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
               y_range: Tuple[float, float],
-              bottom: bool = False) -> None:
+              bottom: bool = False,
+              color: str='black') -> None:
     """
     Attach a text label above each bar displaying its height
     """
@@ -52,12 +53,14 @@ def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
             ax.text(x_pos, y_pos,
                     '{:02.2f}'.format(height),
                     ha='center', va='bottom', weight='bold',
-                    rotation='vertical')
+                    rotation='vertical',
+                    color=color)
         else:
             y_pos = rect.get_y()
             ax.text(x_pos, y_pos,
                     '{:02.2f}'.format(height),
-                    ha='center', va='bottom', weight='bold')
+                    ha='center', va='bottom', weight='bold',
+                    color=color)
 
 
 def filter_runs(frame_data: pd.DataFrame,
@@ -448,29 +451,65 @@ def plot_cpu_loads(experiments: Dict) -> None:
 
 
 def plot_ram_usage(experiments: Dict) -> None:
-    system_data = [load_system_data_for_experiment(x)
-                   for x in experiments.values()]
+    system_data_samples = []
+    for exp_name, exp_dir in experiments.items():
+        data = load_system_data_for_experiment(exp_dir)
+        runs = data['run'].unique()
+        samples = []
+        for run in runs:
+            df = data.loc[data['run'] == run]
+            samples.append(df.sample(n=2 * SAMPLE_FACTOR))
+        system_data_samples.append(pd.concat(samples))
+
+    mem_means = [x['mem_avail'].mean() for x in system_data_samples]
+    mem_stds = [x['mem_avail'].std() for x in system_data_samples]
+    mem_count = [x.shape[0] for x in system_data_samples]
+
+    mem_confs = [
+        stats.norm.interval(
+            CONFIDENCE,
+            loc=mean,
+            scale=std / math.sqrt(count)
+        )
+        for mean, std, count in zip(mem_means, mem_stds, mem_count)
+    ]
+
+    err = [
+        [mean - x[0] for mean, x in zip(mem_means, mem_confs)],
+        [x[1] - mean for mean, x in zip(mem_means, mem_confs)]
+    ]
 
     # total_mem = psutil.virtual_memory().total
-    conv_factor = float(1024 * 1024 * 1024)  # MiB to GiB
+    conv_factor = float(1024 * 1024 * 1024)  # GiB <-> MiB
+    total_mem = 32 * conv_factor
+    mem_usage_means = [(total_mem - m) / conv_factor for m in mem_means]
+    err = [
+        list(map(lambda m: m / conv_factor, err[0])),
+        list(map(lambda m: m / conv_factor, err[1]))
+    ]
+    total_mem = total_mem / conv_factor  # convert back to GiB
 
-    total_mem = 32 * float(1024 * 1024 * 1024)
-    ram_usage = [(total_mem - x['mem_avail']).mean() for x in system_data]
-    ram_usage = [x / conv_factor for x in ram_usage]
-
-    total_mem = total_mem / conv_factor  # convert to GiB
     ram_range = (0, total_mem + 3)
 
     fig, ax = plt.subplots()
-    rect = ax.bar(experiments.keys(), ram_usage, label='Average RAM usage')
-    autolabel(ax, rect, ram_range, bottom=True)
+    rect = ax.bar(experiments.keys(), mem_usage_means,
+                  label='Average RAM usage',
+                  color='darkblue')
+    ax.errorbar(experiments.keys(), mem_usage_means, yerr=err,
+                fmt='none',
+                linestyle='none',
+                ecolor='darkorange',
+                lw=10, alpha=1.0,
+                capsize=0, capthick=1, label='95% Confidence Interval')
+
+    autolabel(ax, rect, ram_range, bottom=True, color='white')
 
     ax.set_ylim(*ram_range)
     ax.axhline(y=total_mem,
                color='red',
                label='Max. available memory')
     ax.set_ylabel('Usage [GiB]')
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    plt.legend(loc="center left")
     plt.show()
 
 
