@@ -458,9 +458,9 @@ def print_successful_runs(experiments):
 if __name__ == '__main__':
     with plt.style.context('ggplot'):
         experiments = {
-            '1 Client'  : '1Client_100Runs',
-            '5 Clients' : '5Clients_100Runs',
-            '10 Clients': '10Clients_100Runs'
+            '1 Client'  : '1Client_100Runs_0.5CPU',
+            '5 Clients' : '5Clients_100Runs_0.5CPU',
+            '10 Clients': '10Clients_100Runs_0.5CPU'
         }
 
         os.chdir('1Client_100Runs_BadLink')
