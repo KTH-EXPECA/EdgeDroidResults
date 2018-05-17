@@ -3,12 +3,14 @@
 import json
 from collections import namedtuple
 from multiprocessing.pool import Pool
+from typing import NamedTuple
 
 import click
 import pandas as pd
 from scapy.all import *
 
 from lego_timing import LEGOTCPdumpParser
+from util import sample_frame_stats
 
 START_WINDOW = 10.0
 
@@ -175,6 +177,31 @@ def cli():
 @cli.command()
 @click.argument('experiment_id',
                 type=click.Path(dir_okay=True, file_okay=False, exists=True))
+def sample_data(experiment_id):
+    os.chdir(experiment_id)
+    frame_data = pd.read_csv('total_frame_stats.csv')
+    run_data = pd.read_csv('total_run_stats.csv')
+
+    sampl_feedback = sample_frame_stats(frame_data, run_data, feedback=True)
+    sampl_nofeedback = sample_frame_stats(frame_data, run_data, feedback=False)
+
+    sampl_feedback = {k: v._asdict()
+                      for k, v in sampl_feedback._asdict().items()}
+    sampl_nofeedback = {k: v._asdict()
+                        for k, v in sampl_nofeedback._asdict().items()}
+
+    with open('sampled_time_stats_feedback.json', 'w') as f:
+        json.dump(sampl_feedback, f)
+
+    with open('sampled_time_stats_nofeedback.json', 'w') as f:
+        json.dump(sampl_nofeedback, f)
+
+    os.chdir('..')
+
+
+@cli.command()
+@click.argument('experiment_id',
+                type=click.Path(dir_okay=True, file_okay=False, exists=True))
 @click.argument('n_clients', type=int)
 @click.argument('n_runs', type=int)
 def prepare_task_stats(experiment_id, n_clients, n_runs):
@@ -229,25 +256,6 @@ def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
         system_stats = pd.concat(system_dfs, ignore_index=True)
         system_stats.to_csv('total_system_stats.csv')
 
-    # for run_idx in range(n_runs):
-    #     if not only_system_stats:
-    #         clients_df = parse_all_clients_for_run(run_idx, n_clients)
-    #         if runs.empty:
-    #             runs = clients_df
-    #         else:
-    #             runs = pd.concat([runs, clients_df], ignore_index=True)
-    #
-    #     system = load_system_stats_for_run(run_idx, n_clients)
-    #     if system_stats.empty:
-    #         system_stats = system
-    #     else:
-    #         system_stats = pd.concat([system_stats, system],
-    # ignore_index=True)
-    #
-    # if not only_system_stats:
-    #     runs.to_csv('total_frame_stats.csv')
-    #
-    # system_stats.to_csv('total_system_stats.csv')
     os.chdir('..')
 
 
