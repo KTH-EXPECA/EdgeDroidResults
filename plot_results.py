@@ -40,7 +40,7 @@ NO_FEEDBACK_BIN_RANGE = (10, 200)
 def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
               y_range: Tuple[float, float],
               bottom: bool = False,
-              color: str='black') -> None:
+              color: str = 'black') -> None:
     """
     Attach a text label above each bar displaying its height
     """
@@ -509,7 +509,11 @@ def plot_ram_usage(experiments: Dict) -> None:
                color='red',
                label='Max. available memory')
     ax.set_ylabel('Usage [GiB]')
-    plt.legend(loc="center left")
+    ax.legend(loc="center left")
+
+    fig.set_size_inches(*PLOT_DIM)
+    fig.savefig('ram_usage.pdf', bbox_inches='tight')
+
     plt.show()
 
 
