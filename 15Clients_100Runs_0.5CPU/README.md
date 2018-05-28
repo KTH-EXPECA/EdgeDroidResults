@@ -4,6 +4,7 @@
 - Uncongested network
     -  Network locked to a mostly unused channel (6)
 - Limited CPUs for the backend: 4 out of 8
+    - SpeedStep and TurboBoost are off.
 - 20MHz band
 - 2.4Ghz, 802.11n
 
