@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
 import json
-from collections import namedtuple
 from multiprocessing.pool import Pool
-from typing import NamedTuple
+from typing import Dict
 
 import click
 import pandas as pd
@@ -12,18 +11,21 @@ from scapy.all import *
 from lego_timing import LEGOTCPdumpParser
 from util import sample_frame_stats
 
+from concurrent_logging import LOGGER
+
 START_WINDOW = 10.0
 
 
-def load_results(client_idx):
+def load_results(client_idx) -> Dict:
     filename = '{:02}_stats.json'.format(client_idx)
     with open(filename, 'r') as f:
         return json.load(f, encoding='utf-8')
 
 
-def parse_all_clients_for_run(run_idx, num_clients):
+def parse_all_clients_for_run(run_idx, num_clients) -> pd.DataFrame:
     os.chdir('run_{}'.format(run_idx + 1))
-    print('Processing {} clients for run {}'.format(num_clients, run_idx + 1))
+    LOGGER.info('Processing %d clients for run %d',
+                num_clients, run_idx + 1)
 
     parser = LEGOTCPdumpParser('tcp.pcap')
     with open('server_stats.json', 'r') as f:
@@ -74,7 +76,8 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
                                 start_cutoff, end_cutoff):
     data = load_results(client_idx)
 
-    print('Parsing stats for client {}'.format(client_idx))
+    # print('Parsing stats for client {}'.format(client_idx))
+    LOGGER.info('Parsing stats for client %d', client_idx)
 
     video_port = data['ports']['video']
     result_port = data['ports']['result']
@@ -93,31 +96,48 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
     }
 
     for frame in data['run_results']['frames']:
+        frame_id = frame['frame_id']
+        client_send = frame['sent']
+        feedback = frame['feedback']
+
         try:
-            frame_id = frame['frame_id']
-            client_send = frame['sent']
-            feedback = frame['feedback']
-            server_recv = server_in[frame_id].pop(0) + server_offset
-            server_send = server_out[frame_id].pop(0) + server_offset
-            client_recv = frame['recv']
+            not_found = None
+            try:
+                server_recv = server_in[frame_id].pop(0) + server_offset
+            except KeyError as error:
+                LOGGER.warning(
+                    'Frame %d was not found in the incoming frame dump',
+                    frame_id)
+                not_found = error
+            try:
+                server_send = server_out[frame_id].pop(0) + server_offset
+            except KeyError as error:
+                LOGGER.warning(
+                    'Frame %d was not found in the outgoing frame dump',
+                    frame_id)
+                not_found = error
 
-            if client_send < start_cutoff or client_recv > end_cutoff:
-                continue
+            if not_found:
+                raise not_found
+        except KeyError:
+            LOGGER.warning('Skipping frame %d for client %d',
+                           frame_id, client_idx)
+            continue
 
-            n_data['client_id'].append(client_idx)
-            n_data['frame_id'].append(frame_id)
-            n_data['feedback'].append(feedback)
-            n_data['client_send'].append(client_send)
-            n_data['server_recv'].append(server_recv)
-            n_data['server_send'].append(server_send)
-            n_data['client_recv'].append(client_recv)
+        client_recv = frame['recv']
 
-        except KeyError as e:
-            print(e)
-            print(os.getcwd())
-            print('Client: ', client_idx)
-            print('Ports: ', {'video': video_port, 'result': result_port})
-            raise e
+        if client_send < start_cutoff or client_recv > end_cutoff:
+            continue
+
+        n_data['client_id'].append(client_idx)
+        n_data['frame_id'].append(frame_id)
+        n_data['feedback'].append(feedback)
+        n_data['client_send'].append(client_send)
+        n_data['server_recv'].append(server_recv)
+        n_data['server_send'].append(server_send)
+        n_data['client_recv'].append(client_recv)
+
+        # raise e
 
     df = pd.DataFrame.from_dict(n_data)
     df = df.astype(dtype={'feedback' : bool,
@@ -129,7 +149,8 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
 def load_system_stats_for_run(run_idx):
     os.chdir('run_{}'.format(run_idx + 1))
 
-    print('Processing system stats for run {}'.format(run_idx))
+    # print('Processing system stats for run {}'.format(run_idx))
+    LOGGER.info('Processing system stats for run %d', run_idx + 1)
 
     df = pd.read_csv('system_stats.csv')
 
@@ -155,7 +176,11 @@ def load_system_stats_for_run(run_idx):
 
 def get_run_status(client_id, run_id):
     os.chdir('run_{}'.format(run_id + 1))
-    print('Loading run results for client {}, run {}'.format(client_id, run_id))
+    # print('Loading run results for client {}, run {}'.format(client_id,
+    # run_id))
+
+    LOGGER.info('Loading run results for client %d, run %d',
+                client_id, run_id + 1)
     data = load_results(client_id)
 
     status = dict(
@@ -174,10 +199,7 @@ def cli():
     pass
 
 
-@cli.command()
-@click.argument('experiment_id',
-                type=click.Path(dir_okay=True, file_okay=False, exists=True))
-def sample_data(experiment_id):
+def __sample_data(experiment_id):
     os.chdir(experiment_id)
     frame_data = pd.read_csv('total_frame_stats.csv')
     run_data = pd.read_csv('total_run_stats.csv')
@@ -202,9 +224,11 @@ def sample_data(experiment_id):
 @cli.command()
 @click.argument('experiment_id',
                 type=click.Path(dir_okay=True, file_okay=False, exists=True))
-@click.argument('n_clients', type=int)
-@click.argument('n_runs', type=int)
-def prepare_task_stats(experiment_id, n_clients, n_runs):
+def sample_data(experiment_id):
+    __sample_data(experiment_id)
+
+
+def __prepare_task_stats(experiment_id, n_clients, n_runs):
     os.chdir(experiment_id)
 
     combinations = []
@@ -235,9 +259,12 @@ def prepare_task_stats(experiment_id, n_clients, n_runs):
                 type=click.Path(dir_okay=True, file_okay=False, exists=True))
 @click.argument('n_clients', type=int)
 @click.argument('n_runs', type=int)
-@click.option('--only_system_stats', type=bool, default=False,
-              help='Only prepare system stats.')
-def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
+def prepare_task_stats(experiment_id, n_clients, n_runs):
+    __prepare_task_stats(experiment_id, n_clients, n_runs)
+
+
+def __prepare_client_stats(experiment_id, n_clients,
+                           n_runs, only_system_stats=False):
     os.chdir(experiment_id)
 
     with Pool(min(6, n_runs)) as pool:
@@ -257,6 +284,28 @@ def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
         system_stats.to_csv('total_system_stats.csv')
 
     os.chdir('..')
+
+
+@cli.command()
+@click.argument('experiment_id',
+                type=click.Path(dir_okay=True, file_okay=False, exists=True))
+@click.argument('n_clients', type=int)
+@click.argument('n_runs', type=int)
+@click.option('--only_system_stats', type=bool, default=False,
+              help='Only prepare system stats.')
+def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
+    __prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats)
+
+
+@cli.command()
+@click.argument('experiment_id',
+                type=click.Path(dir_okay=True, file_okay=False, exists=True))
+@click.argument('n_clients', type=int)
+@click.argument('n_runs', type=int)
+def process_all(experiment_id, n_clients, n_runs):
+    __prepare_client_stats(experiment_id, n_clients, n_runs, False)
+    __prepare_task_stats(experiment_id, n_clients, n_runs)
+    __sample_data(experiment_id)
 
 
 if __name__ == '__main__':

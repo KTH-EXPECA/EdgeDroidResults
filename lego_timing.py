@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import json
-import struct
+from json import JSONDecodeError
 from typing import Dict
-
 from scapy.all import *
+from concurrent_logging import LOGGER
 
 
 class LEGOTCPdumpParser():
@@ -40,8 +40,14 @@ class LEGOTCPdumpParser():
                     # store the time as milliseconds
                     processed_frames[frame_id].append(pkt.time * 1000.0)
 
-                except Exception:
-                    continue
+                except UnicodeDecodeError:
+                    LOGGER.warning('Incoming: Could not decode payload.')
+                except JSONDecodeError:
+                    LOGGER.warning('Incoming: Could not decode JSON string.')
+                except Exception as error:
+                    LOGGER.error('Incoming: Unhandled exception!')
+                    LOGGER.error(error)
+                    raise error
 
         return processed_frames
 
@@ -71,8 +77,17 @@ class LEGOTCPdumpParser():
                     # store the time as milliseconds
                     processed_frames[frame_id].append(pkt.time * 1000.0)
 
-                except Exception:
-                    continue
+                except UnicodeDecodeError:
+                    LOGGER.warning('Outgoing: Could not decode payload.')
+                except JSONDecodeError:
+                    LOGGER.warning('Outgoing: Could not decode JSON string.')
+                except ValueError:
+                    LOGGER.warning('Outgoing: Could not find the frame header '
+                                   'string.')
+                except Exception as error:
+                    LOGGER.error('Outgoing: Unhandled exception!')
+                    LOGGER.error(error)
+                    raise error
 
         return processed_frames
 
