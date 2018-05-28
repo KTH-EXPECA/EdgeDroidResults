@@ -44,6 +44,9 @@ class LEGOTCPdumpParser():
                     LOGGER.warning('Incoming: Could not decode payload.')
                 except JSONDecodeError:
                     LOGGER.warning('Incoming: Could not decode JSON string.')
+                    LOGGER.warning('Header: %s', header.decode('utf-8'))
+                except struct.error:
+                    continue
                 except Exception as error:
                     LOGGER.error('Incoming: Unhandled exception!')
                     LOGGER.error(error)
@@ -82,8 +85,9 @@ class LEGOTCPdumpParser():
                 except JSONDecodeError:
                     LOGGER.warning('Outgoing: Could not decode JSON string.')
                 except ValueError:
-                    LOGGER.warning('Outgoing: Could not find the frame header '
-                                   'string.')
+                    # LOGGER.warning('Outgoing: Could not find the frame
+                    # header string.')
+                    continue
                 except Exception as error:
                     LOGGER.error('Outgoing: Unhandled exception!')
                     LOGGER.error(error)
