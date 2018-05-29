@@ -10,12 +10,14 @@ from util import *
 
 # n_runs = 25
 
-PLOT_DIM = (4, 3)
-FEEDBACK_TIME_RANGE = (0, 600)
-NO_FEEDBACK_TIME_RANGE = (0, 100)
+# PLOT_DIM = (4, 3)
+SEPARATE_LEGEND = False
+PLOT_DIM = (8, 6)
+FEEDBACK_TIME_RANGE = (0, 800)
+NO_FEEDBACK_TIME_RANGE = (0, 150)
 
-FEEDBACK_BIN_RANGE = (200, 800)
-NO_FEEDBACK_BIN_RANGE = (10, 200)
+FEEDBACK_BIN_RANGE = (200, 1200)
+NO_FEEDBACK_BIN_RANGE = (10, 300)
 
 
 # HIST_FEEDBACK_YRANGE = (0, 0.025)
@@ -105,21 +107,24 @@ def plot_time_dist(experiments: Dict, feedback: bool) -> None:
         pdfs.append(*ax.plot(bins, pdf,
                              label=exp_name + ' lognorm PDF'))
 
-    figlegend = pylab.figure(figsize=(3, 1))
-    plots = (*(h[0] for h in hists), *pdfs)
-    labels = (
-        *(exp_name for exp_name, _ in results.items()),
-        *(exp_name + ' PDF' for exp_name, _ in results.items())
-    )
-    figlegend.legend(plots,
-                     labels,
-                     loc='center',
-                     mode='expand',
-                     ncol=2)
-    figlegend.tight_layout()
-    figlegend.savefig('proc_hist_legend.pdf', transparent=True,
-                      bbox_inches='tight', pad_inches=0)
-    figlegend.show()
+    if SEPARATE_LEGEND:
+        figlegend = pylab.figure(figsize=(3, 1))
+        plots = (*(h[0] for h in hists), *pdfs)
+        labels = (
+            *(exp_name for exp_name, _ in results.items()),
+            *(exp_name + ' PDF' for exp_name, _ in results.items())
+        )
+        figlegend.legend(plots,
+                         labels,
+                         loc='center',
+                         mode='expand',
+                         ncol=2)
+        figlegend.tight_layout()
+        figlegend.savefig('proc_hist_legend.pdf', transparent=True,
+                          bbox_inches='tight', pad_inches=0)
+        figlegend.show()
+    else:
+        ax.legend(loc='upper right', ncol=2)
 
     ax.set_xscale("log")
     ax.set_xlabel('Time [ms]')
@@ -239,14 +244,17 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     # ax.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
     #           ncol=2, mode="expand", borderaxespad=0.)
 
-    figlegend = pylab.figure(figsize=(3, 1))
-    figlegend.legend((up_err, *rects),
-                     (up_err.get_label(), *(r.get_label() for r in rects)),
-                     loc='center', mode='expand')
-    figlegend.tight_layout()
-    figlegend.savefig('times_legend.pdf', transparent=True,
-                      bbox_inches='tight', pad_inches=0)
-    figlegend.show()
+    if SEPARATE_LEGEND:
+        figlegend = pylab.figure(figsize=(3, 1))
+        figlegend.legend((up_err, *rects),
+                         (up_err.get_label(), *(r.get_label() for r in rects)),
+                         loc='center', mode='expand')
+        figlegend.tight_layout()
+        figlegend.savefig('times_legend.pdf', transparent=True,
+                          bbox_inches='tight', pad_inches=0)
+        figlegend.show()
+    else:
+        ax.legend(loc='upper left', ncol=2)
 
     # Add xticks on the middle of the group bars
     # ax.set_xlabel('Number of clients', fontweight='bold')
@@ -416,17 +424,18 @@ def print_successful_runs(experiments):
 
 if __name__ == '__main__':
     with plt.style.context('ggplot'):
-        experiments = {
-            'Base'          : '10Clients_100Runs',
-            'Impaired\nWiFi': '10Clients_100Runs_BadLink',
-            'Impaired\nCPU' : '10Clients_100Runs_0.5CPU'
-        }
-
         # experiments = {
-        #     '1 Client'  : '1Client_100Runs',
-        #     '5 Clients' : '5Clients_100Runs',
-        #     '10 Clients': '10Clients_100Runs'
+        #     'Base'          : '10Clients_100Runs',
+        #     'Impaired\nWiFi': '10Clients_100Runs_BadLink',
+        #     'Impaired\nCPU' : '10Clients_100Runs_0.5CPU'
         # }
+
+        experiments = {
+            '1 Client'  : '1Client_100Runs',
+            '5 Clients' : '5Clients_100Runs',
+            '10 Clients': '10Clients_100Runs',
+            '15 Clients': '15Clients_100Runs'
+        }
 
         # os.chdir('1Client_100Runs_BadLink')
         # frame_data = pd.read_csv('total_frame_stats.csv')
