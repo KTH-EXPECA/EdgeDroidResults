@@ -1,0 +1,1 @@
+{"client_id": 9, "experiment_id": "LEGOHead_15Client100Benchmark", "ports": {"video": 60027, "result": 60028, "control": 60029}, "run_results": {"init": 1527858790425.7273, "end": 1527858860059.7273, "timestamp_error": 22555.61145298841, "success": true, "ntp_offset": -5667.272727272728, "frames": []}}
