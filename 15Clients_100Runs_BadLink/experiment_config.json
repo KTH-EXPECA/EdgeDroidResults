@@ -1,0 +1,86 @@
+{
+  "experiment_id": "LEGOHead_15Client100Benchmark",
+  "clients": 15,
+  "runs": 100,
+  "steps": 7,
+  "trace_dir": "/home/molguin/workspace/CAPerformance_WS/CognitiveAssistance_Traces/lego/HeadTrace2",
+  "ntp_server": "130.237.72.211",
+  "num_cpus": 8,
+  "ports": [
+    {
+      "video": 60000,
+      "result": 60001,
+      "control": 60002
+    },
+    {
+      "video": 60003,
+      "result": 60004,
+      "control": 60005
+    },
+    {
+      "video": 60006,
+      "result": 60007,
+      "control": 60008
+    },
+    {
+      "video": 60009,
+      "result": 60010,
+      "control": 60011
+    },
+    {
+      "video": 60012,
+      "result": 60013,
+      "control": 60014
+    },
+    {
+      "video": 60015,
+      "result": 60016,
+      "control": 60017
+    },
+    {
+      "video": 60018,
+      "result": 60019,
+      "control": 60020
+    },
+    {
+      "video": 60021,
+      "result": 60022,
+      "control": 60023
+    },
+    {
+      "video": 60024,
+      "result": 60025,
+      "control": 60026
+    },
+    {
+      "video": 60027,
+      "result": 60028,
+      "control": 60029
+    },
+    {
+      "video": 60030,
+      "result": 60031,
+      "control": 60032
+    },
+    {
+      "video": 60033,
+      "result": 60034,
+      "control": 60035
+    },
+    {
+      "video": 60036,
+      "result": 60037,
+      "control": 60038
+    },
+    {
+      "video": 60039,
+      "result": 60040,
+      "control": 60041
+    },
+    {
+      "video": 60042,
+      "result": 60043,
+      "control": 60044
+    }
+  ]
+}
