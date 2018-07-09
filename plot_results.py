@@ -13,7 +13,7 @@ from util import *
 # PLOT_DIM = (4, 3)
 SEPARATE_LEGEND = False
 PLOT_DIM = (8, 6)
-FEEDBACK_TIME_RANGE = (0, 800)
+FEEDBACK_TIME_RANGE = (0, 1000)
 NO_FEEDBACK_TIME_RANGE = (0, 150)
 
 FEEDBACK_BIN_RANGE = (200, 1200)
@@ -430,11 +430,16 @@ if __name__ == '__main__':
         #     'Impaired\nCPU' : '10Clients_100Runs_0.5CPU'
         # }
 
+        # experiments = {
+        #     '1 Client'  : '1Client_100Runs',
+        #     '5 Clients' : '5Clients_100Runs',
+        #     '10 Clients': '10Clients_100Runs',
+        #     '15 Clients': '15Clients_100Runs'
+        # }
+
         experiments = {
-            '1 Client'  : '1Client_100Runs',
-            '5 Clients' : '5Clients_100Runs',
-            '10 Clients': '10Clients_100Runs',
-            '15 Clients': '15Clients_100Runs'
+            'No Load': '1Client_10Runs',
+            '100% Load': '1Client_10Runs_ArtificialLoad'
         }
 
         # os.chdir('1Client_100Runs_BadLink')

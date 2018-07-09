@@ -4,8 +4,9 @@ from typing import NamedTuple
 import pandas as pd
 from scipy import stats
 
+# TODO: tweak
 SAMPLE_FACTOR = 5
-MIN_SAMPLES = 500
+MIN_SAMPLES = 100  # 300
 CONFIDENCE = 0.95
 Z_STAR = 1.96
 
