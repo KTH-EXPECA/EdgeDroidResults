@@ -10,11 +10,12 @@ from util import *
 
 # n_runs = 25
 
-# PLOT_DIM = (4, 3)
-SEPARATE_LEGEND = False
-PLOT_DIM = (8, 6)
-FEEDBACK_TIME_RANGE = (0, 1000)
-NO_FEEDBACK_TIME_RANGE = (0, 150)
+PLOT_DIM = (4.5, 3)
+SEPARATE_LEGEND = True
+PLOT_TITLES = False
+# PLOT_DIM = (8, 6)
+FEEDBACK_TIME_RANGE = (0, 500)
+NO_FEEDBACK_TIME_RANGE = (0, 100)
 
 FEEDBACK_BIN_RANGE = (200, 1200)
 NO_FEEDBACK_BIN_RANGE = (10, 300)
@@ -137,11 +138,13 @@ def plot_time_dist(experiments: Dict, feedback: bool) -> None:
     if feedback:
         # ax.set_ylim(*HIST_FEEDBACK_YRANGE)
         fig.savefig('proc_hist_feedback.pdf', bbox_inches='tight')
-        plt.title('Processing times for frames w/ feedback')
+        if PLOT_TITLES:
+            plt.title('Processing times for frames w/ feedback')
     else:
         # ax.set_ylim(*HIST_NO_FEEDBACK_YRANGE)
         fig.savefig('proc_hist_nofeedback.pdf', bbox_inches='tight')
-        plt.title('Processing times for frames w/o feedback')
+        if PLOT_TITLES:
+            plt.title('Processing times for frames w/o feedback')
     plt.show()
 
 
@@ -264,10 +267,12 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     fig.set_size_inches(*PLOT_DIM)
     if feedback:
         fig.savefig('times_feedback.pdf', bbox_inches='tight')
-        plt.title('Time statistics for frames w/ feedback')
+        if PLOT_TITLES:
+            plt.title('Time statistics for frames w/ feedback')
     else:
         fig.savefig('times_nofeedback.pdf', bbox_inches='tight')
-        plt.title('Time statistics for frames w/o feedback')
+        if PLOT_TITLES:
+            plt.title('Time statistics for frames w/o feedback')
     plt.show()
 
 
@@ -424,11 +429,13 @@ def print_successful_runs(experiments):
 
 if __name__ == '__main__':
     with plt.style.context('ggplot'):
-        # experiments = {
-        #     'Base'          : '10Clients_100Runs',
-        #     'Impaired\nWiFi': '10Clients_100Runs_BadLink',
-        #     'Impaired\nCPU' : '10Clients_100Runs_0.5CPU'
-        # }
+        experiments = {
+            '1 Client\nOptimal'        : '1Client_100Runs',
+            '5 Clients\nOptimal'       : '5Clients_100Runs',
+            '10 Clients\nOptimal'      : '10Clients_100Runs',
+            '10 Clients\nImpaired\nWiFi': '10Clients_100Runs_BadLink'  # ,
+            # 'Impaired\nCPU' : '10Clients_100Runs_0.5CPU'
+        }
 
         # experiments = {
         #     '1 Client'  : '1Client_100Runs',
@@ -437,10 +444,10 @@ if __name__ == '__main__':
         #     '15 Clients': '15Clients_100Runs'
         # }
 
-        experiments = {
-            'No Load': '1Client_10Runs',
-            '100% Load': '1Client_10Runs_ArtificialLoad'
-        }
+        # experiments = {
+        #     'TCPDUMP': '1Client_10Runs_ArtificialLoad',
+        #     'No TCPDUMP': '1Client_10Runs_NoTCPDUMP'
+        # }
 
         # os.chdir('1Client_100Runs_BadLink')
         # frame_data = pd.read_csv('total_frame_stats.csv')
@@ -451,8 +458,8 @@ if __name__ == '__main__':
 
         plot_avg_times_frames(experiments, feedback=True)
         plot_avg_times_frames(experiments, feedback=False)
-        plot_time_dist(experiments, feedback=True)
-        plot_time_dist(experiments, feedback=False)
+        #plot_time_dist(experiments, feedback=True)
+        #plot_time_dist(experiments, feedback=False)
 
-        plot_cpu_loads(experiments)
-        plot_ram_usage(experiments)
+        #plot_cpu_loads(experiments)
+        #plot_ram_usage(experiments)

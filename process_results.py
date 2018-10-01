@@ -22,12 +22,16 @@ def load_results(client_idx) -> Dict:
         return json.load(f, encoding='utf-8')
 
 
-def parse_all_clients_for_run(run_idx, num_clients) -> pd.DataFrame:
+def parse_all_clients_for_run(run_idx, num_clients, use_tcpdump=True) -> \
+        pd.DataFrame:
     os.chdir('run_{}'.format(run_idx + 1))
     LOGGER.info('Processing %d clients for run %d',
                 num_clients, run_idx + 1)
 
-    parser = LEGOTCPdumpParser('tcp.pcap')
+    if use_tcpdump:
+        parser = LEGOTCPdumpParser('tcp.pcap')
+    else:
+        parser = None
     with open('server_stats.json', 'r') as f:
         server_stats = json.load(f)
 
@@ -36,8 +40,11 @@ def parse_all_clients_for_run(run_idx, num_clients) -> pd.DataFrame:
     run_start = server_stats['run_start']
     run_end = server_stats['run_end']
 
-    start_cutoff = START_WINDOW * 1000.0 + run_start
-    end_cutoff = run_end - START_WINDOW * 1000.0
+    start_cutoff = (START_WINDOW * 1000.0) + run_start
+    end_cutoff = run_end - (START_WINDOW * 1000.0)
+
+    print('Window for run ' + str(run_idx + 1), start_cutoff, end_cutoff)
+
     # with Pool(3) as pool:
     client_dfs = list(itertools.starmap(
         _parse_client_stats_for_run,
@@ -46,7 +53,8 @@ def parse_all_clients_for_run(run_idx, num_clients) -> pd.DataFrame:
             itertools.repeat(parser),
             itertools.repeat(server_ntp_offset),
             itertools.repeat(start_cutoff),
-            itertools.repeat(end_cutoff)
+            itertools.repeat(end_cutoff),
+            itertools.repeat(use_tcpdump)
         )
     ))
 
@@ -73,7 +81,7 @@ def parse_all_clients_for_run(run_idx, num_clients) -> pd.DataFrame:
 
 
 def _parse_client_stats_for_run(client_idx, parser, server_offset,
-                                start_cutoff, end_cutoff):
+                                start_cutoff, end_cutoff, use_tcpdump=True):
     data = load_results(client_idx)
 
     # print('Parsing stats for client {}'.format(client_idx))
@@ -81,9 +89,6 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
 
     video_port = data['ports']['video']
     result_port = data['ports']['result']
-
-    server_in = parser.extract_incoming_timestamps(video_port)
-    server_out = parser.extract_outgoing_timestamps(result_port)
 
     n_data = {
         'client_id'  : [],
@@ -95,39 +100,49 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
         'client_recv': []
     }
 
+    if use_tcpdump:
+        server_in = parser.extract_incoming_timestamps(video_port)
+        server_out = parser.extract_outgoing_timestamps(result_port)
+    else:
+        server_in = None
+        server_out = None
+
     for frame in data['run_results']['frames']:
         frame_id = frame['frame_id']
         client_send = frame['sent']
         feedback = frame['feedback']
-
-        try:
-            not_found = None
-            try:
-                server_recv = server_in[frame_id].pop(0) + server_offset
-            except KeyError as error:
-                LOGGER.warning(
-                    'Frame %d was not found in the incoming frame dump',
-                    frame_id)
-                not_found = error
-            try:
-                server_send = server_out[frame_id].pop(0) + server_offset
-            except KeyError as error:
-                LOGGER.warning(
-                    'Frame %d was not found in the outgoing frame dump',
-                    frame_id)
-                not_found = error
-
-            if not_found:
-                raise not_found
-        except KeyError:
-            LOGGER.warning('Skipping frame %d for client %d',
-                           frame_id, client_idx)
-            continue
-
         client_recv = frame['recv']
 
-        if client_send < start_cutoff or client_recv > end_cutoff:
-            continue
+        # if client_send < start_cutoff or client_recv > end_cutoff:
+        #     continue
+
+        if use_tcpdump and server_in and server_out:
+            try:
+                not_found = None
+                try:
+                    server_recv = server_in[frame_id].pop(0) + server_offset
+                except KeyError as error:
+                    LOGGER.warning(
+                        'Frame %d was not found in the incoming frame dump',
+                        frame_id)
+                    not_found = error
+                try:
+                    server_send = server_out[frame_id].pop(0) + server_offset
+                except KeyError as error:
+                    LOGGER.warning(
+                        'Frame %d was not found in the outgoing frame dump',
+                        frame_id)
+                    not_found = error
+
+                if not_found:
+                    raise not_found
+            except KeyError:
+                LOGGER.warning('Skipping frame %d for client %d',
+                               frame_id, client_idx)
+                continue
+        else:
+            server_recv = frame['server_recv'] * 1000.0 + server_offset
+            server_send = frame['server_sent'] * 1000.0 + server_offset
 
         n_data['client_id'].append(client_idx)
         n_data['frame_id'].append(frame_id)
@@ -264,7 +279,8 @@ def prepare_task_stats(experiment_id, n_clients, n_runs):
 
 
 def __prepare_client_stats(experiment_id, n_clients,
-                           n_runs, only_system_stats=False):
+                           n_runs, only_system_stats=False,
+                           use_tcpdump=True):
     os.chdir(experiment_id)
 
     with Pool(min(6, n_runs)) as pool:
@@ -273,7 +289,8 @@ def __prepare_client_stats(experiment_id, n_clients,
                 parse_all_clients_for_run,
                 zip(
                     range(n_runs),
-                    itertools.repeat(n_clients)
+                    itertools.repeat(n_clients),
+                    itertools.repeat(use_tcpdump)
                 )
             )
             runs = pd.concat(runs_df, ignore_index=True)
@@ -302,8 +319,9 @@ def prepare_client_stats(experiment_id, n_clients, n_runs, only_system_stats):
                 type=click.Path(dir_okay=True, file_okay=False, exists=True))
 @click.argument('n_clients', type=int)
 @click.argument('n_runs', type=int)
-def process_all(experiment_id, n_clients, n_runs):
-    __prepare_client_stats(experiment_id, n_clients, n_runs, False)
+@click.argument('use_tcpdump', type=bool, default=True)
+def process_all(experiment_id, n_clients, n_runs, use_tcpdump):
+    __prepare_client_stats(experiment_id, n_clients, n_runs, False, use_tcpdump)
     __prepare_task_stats(experiment_id, n_clients, n_runs)
     __sample_data(experiment_id)
 
