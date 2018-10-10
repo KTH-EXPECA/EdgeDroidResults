@@ -14,8 +14,8 @@ PLOT_DIM = (4.5, 3)
 SEPARATE_LEGEND = True
 PLOT_TITLES = False
 # PLOT_DIM = (8, 6)
-FEEDBACK_TIME_RANGE = (0, 500)
-NO_FEEDBACK_TIME_RANGE = (0, 100)
+FEEDBACK_TIME_RANGE = (-200, 500)
+NO_FEEDBACK_TIME_RANGE = (-40, 100)
 
 FEEDBACK_BIN_RANGE = (200, 1200)
 NO_FEEDBACK_BIN_RANGE = (10, 300)
@@ -47,7 +47,8 @@ def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
             y_pos = rect.get_y()
             ax.text(x_pos, y_pos,
                     '{:02.2f}'.format(height),
-                    ha='center', va='bottom', weight='bold',
+                    ha='center', va='top', weight='bold',
+                    rotation='vertical',
                     color=color)
 
 
@@ -192,8 +193,8 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     errorbar_opts = dict(
         fmt='none',
         linestyle='none',
-        ecolor='darkorange',
-        lw=4, alpha=1.0,
+        ecolor='black',
+        lw=3, alpha=1.0,
         capsize=0, capthick=1
     )
 
@@ -236,11 +237,14 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     ax.set_ylabel('Time [ms]')
 
     if feedback:
-        list(map(lambda r: autolabel(ax, r, FEEDBACK_TIME_RANGE), rects))
+        list(map(lambda r: autolabel(ax, r, FEEDBACK_TIME_RANGE, bottom=True),
+                 rects))
         # force eval
         ax.set_ylim(*FEEDBACK_TIME_RANGE)
     else:
-        list(map(lambda r: autolabel(ax, r, NO_FEEDBACK_TIME_RANGE), rects))
+        list(map(lambda r: autolabel(ax, r, NO_FEEDBACK_TIME_RANGE,
+                                     bottom=True),
+                 rects))
         ax.set_ylim(*NO_FEEDBACK_TIME_RANGE)
 
     # plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
@@ -248,10 +252,11 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     #           ncol=2, mode="expand", borderaxespad=0.)
 
     if SEPARATE_LEGEND:
-        figlegend = pylab.figure(figsize=(3, 1))
+        dim_x, dim_y = PLOT_DIM
+        figlegend = pylab.figure(figsize=(dim_x*2.0, .3))
         figlegend.legend((up_err, *rects),
                          (up_err.get_label(), *(r.get_label() for r in rects)),
-                         loc='center', mode='expand')
+                         loc='center', mode='expand', ncol=4)
         figlegend.tight_layout()
         figlegend.savefig('times_legend.pdf', transparent=True,
                           bbox_inches='tight', pad_inches=0)
@@ -263,6 +268,9 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
     # ax.set_xlabel('Number of clients', fontweight='bold')
     ax.set_xticks([r + bar_width for r in range(len(experiments))])
     ax.set_xticklabels(experiments.keys())
+
+    y_ticks = [tick for tick in ax.get_yticks() if tick >= 0]
+    ax.set_yticks(y_ticks)
 
     fig.set_size_inches(*PLOT_DIM)
     if feedback:
@@ -428,7 +436,13 @@ def print_successful_runs(experiments):
 
 
 if __name__ == '__main__':
-    with plt.style.context('ggplot'):
+    with plt.style.context('seaborn-paper'):
+        plt.rcParams['font.size'] = 10 # font size
+        plt.rcParams['xtick.labelsize'] = 10
+        plt.rcParams['ytick.labelsize'] = 10
+        plt.rcParams['axes.labelsize'] = 10
+        plt.rcParams['legend.fontsize'] = 10
+
         experiments = {
             '1 Client\nOptimal'        : '1Client_100Runs',
             '5 Clients\nOptimal'       : '5Clients_100Runs',
