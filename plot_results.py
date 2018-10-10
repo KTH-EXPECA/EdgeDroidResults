@@ -52,6 +52,98 @@ def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
                     color=color)
 
 
+def plot_time_box(experiments: Dict, feedback: bool) -> None:
+    def set_box_color(bp, color):
+        plt.setp(bp['boxes'], color=color)
+        plt.setp(bp['whiskers'], color=color)
+        plt.setp(bp['caps'], color=color)
+        plt.setp(bp['medians'], color=color)
+
+    root_dir = os.getcwd()
+    # results = {}
+    ticks = []
+    processing_times = []
+    uplink_times = []
+    downlink_times = []
+
+    for exp_name, exp_dir in experiments.items():
+        os.chdir(root_dir + '/' + exp_dir)
+        data = pd.read_csv('total_frame_stats.csv')
+        run_data = pd.read_csv('total_run_stats.csv')
+        os.chdir(root_dir)
+
+        data = calculate_derived_metrics(data, feedback)
+        data = filter_runs(data, run_data)
+
+        # results[exp_name] = data
+        ticks.append(exp_name)
+        processing_times.append(data['processing'])
+        uplink_times.append(data['uplink'])
+        downlink_times.append(data['downlink'])
+
+    fig, ax = plt.subplots()
+    num_exps = len(ticks)
+    bp_proc = ax.boxplot(processing_times,
+                         positions=np.array(range(num_exps)) * 3.0,
+                         sym='', widths=0.4)
+    bp_up = ax.boxplot(uplink_times,
+                       positions=np.array(range(num_exps)) * 3.0 - 0.5,
+                       sym='', widths=0.4)
+    bp_down = ax.boxplot(downlink_times,
+                         positions=np.array(range(num_exps)) * 3.0 + 0.5,
+                         sym='', widths=0.4)
+
+    # colors here
+    set_box_color(bp_up, 'C0')
+    set_box_color(bp_proc, 'C1')
+    set_box_color(bp_down, 'C2')
+
+    # legend
+    p1 = ax.plot([], c='C0', label='Uplink', marker='s', linestyle='',
+                 markersize=10)
+    p2 = ax.plot([], c='C1', label='Processing', marker='s', linestyle='',
+                 markersize=10)
+    p3 = ax.plot([], c='C2', label='Downlink', marker='s', linestyle='',
+                 markersize=10)
+
+    if SEPARATE_LEGEND:
+        dim_x, dim_y = PLOT_DIM
+        figlegend = pylab.figure(figsize=(dim_x * 2.0, .3))
+        plots = (*p1, *p2, *p3)
+        figlegend.legend(plots,
+                         ('Uplink', 'Processing', 'Downlink'),
+                         loc='center',
+                         mode='expand',
+                         ncol=3)
+        figlegend.tight_layout()
+        figlegend.savefig('times_box_legend.pdf', transparent=True,
+                          bbox_inches='tight', pad_inches=0)
+        figlegend.show()
+    else:
+        ax.legend()
+
+    ax.set_xticks(range(0, len(ticks) * 3, 3))
+    ax.set_xticklabels(ticks)
+    ax.set_xlim(-1, (len(ticks) * 3) - 2)
+    ax.tick_params(labeltop=False, labelright=True)
+    ax.set_ylabel('Time [ms]')
+    ax.grid(True, which='major', axis='y', linestyle='--', alpha=0.8)
+
+    fig.set_size_inches(*PLOT_DIM)
+    plt.tight_layout()
+
+    if feedback:
+        fig.savefig('times_box_feedback.pdf', bbox_inches='tight')
+        if PLOT_TITLES:
+            plt.title('Time statistics for frames w/ feedback')
+    else:
+        fig.savefig('times_box_nofeedback.pdf', bbox_inches='tight')
+        if PLOT_TITLES:
+            plt.title('Time statistics for frames w/o feedback')
+
+    plt.show()
+
+
 def plot_time_dist(experiments: Dict, feedback: bool) -> None:
     root_dir = os.getcwd()
     results = {}
@@ -253,7 +345,7 @@ def plot_avg_times_frames(experiments: Dict, feedback: bool = False) -> None:
 
     if SEPARATE_LEGEND:
         dim_x, dim_y = PLOT_DIM
-        figlegend = pylab.figure(figsize=(dim_x*2.0, .3))
+        figlegend = pylab.figure(figsize=(dim_x * 2.0, .3))
         figlegend.legend((up_err, *rects),
                          (up_err.get_label(), *(r.get_label() for r in rects)),
                          loc='center', mode='expand', ncol=4)
@@ -437,16 +529,16 @@ def print_successful_runs(experiments):
 
 if __name__ == '__main__':
     with plt.style.context('seaborn-paper'):
-        plt.rcParams['font.size'] = 10 # font size
+        plt.rcParams['font.size'] = 10  # font size
         plt.rcParams['xtick.labelsize'] = 10
         plt.rcParams['ytick.labelsize'] = 10
         plt.rcParams['axes.labelsize'] = 10
         plt.rcParams['legend.fontsize'] = 10
 
         experiments = {
-            '1 Client\nOptimal'        : '1Client_100Runs',
-            '5 Clients\nOptimal'       : '5Clients_100Runs',
-            '10 Clients\nOptimal'      : '10Clients_100Runs',
+            '1 Client\nOptimal'         : '1Client_100Runs',
+            '5 Clients\nOptimal'        : '5Clients_100Runs',
+            '10 Clients\nOptimal'       : '10Clients_100Runs',
             '10 Clients\nImpaired\nWiFi': '10Clients_100Runs_BadLink'  # ,
             # 'Impaired\nCPU' : '10Clients_100Runs_0.5CPU'
         }
@@ -470,10 +562,12 @@ if __name__ == '__main__':
 
         # print_successful_runs(experiments)
 
-        plot_avg_times_frames(experiments, feedback=True)
-        plot_avg_times_frames(experiments, feedback=False)
-        #plot_time_dist(experiments, feedback=True)
-        #plot_time_dist(experiments, feedback=False)
+        # plot_avg_times_frames(experiments, feedback=True)
+        # plot_avg_times_frames(experiments, feedback=False)
+        plot_time_box(experiments, feedback=True)
+        plot_time_box(experiments, feedback=False)
+        # plot_time_dist(experiments, feedback=True)
+        # plot_time_dist(experiments, feedback=False)
 
-        #plot_cpu_loads(experiments)
-        #plot_ram_usage(experiments)
+        # plot_cpu_loads(experiments)
+        # plot_ram_usage(experiments)
