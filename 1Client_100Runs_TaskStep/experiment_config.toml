@@ -1,0 +1,44 @@
+[experiment]
+    # general experiment settings
+    name = "LEGOHead2"
+    docker_img = "molguin/gabriel-lego"
+    clients = 1
+    runs = 100
+
+[experiment.trace]
+    # settings pertaining to the trace used in the experiment
+    steps = 7
+    dir = "/home/molguin/workspace/CAPerformance_WS/CognitiveAssistance_Traces/lego/HeadTrace2"
+    fps = 15
+    rewind_seconds = 5
+    max_replays = 3
+
+[experiment.ntp]
+    # ntp servers used for synchronization
+    servers = ["130.237.72.211"]
+
+[experiment.performance] # performance settings, such as CPUs usable by the docker instances
+    # indices of cores available to the docker instances. Empty list indicates to use all available cores:
+    cpu_cores = [0]
+
+    artificial_load = false # generate additional "fake" load on the CPUs?
+    artificial_load_percent = 100
+
+[[experiment.ports]]
+    # array of port configurations for each client, see (*)
+    video = 8999
+    results = 8988
+    control = 33333
+
+# (*) [[experiment.ports]] represents one element of the array of port configurations.
+# The configuration requires one of these per client, so, for example, an experiment
+# with three clients would need three [[experiment.ports]] sections:
+#
+# [[experiment.ports]]
+# ... client 1
+#
+# [[experiment.ports]]
+# ... client 2
+#
+# [[experiment.ports]]
+# ... client 3
