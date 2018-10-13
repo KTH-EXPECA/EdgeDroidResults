@@ -6,7 +6,7 @@ from scipy import stats
 
 # TODO: tweak
 SAMPLE_FACTOR = 5
-MIN_SAMPLES = 100  # 300
+MIN_SAMPLES = 300  # 300
 CONFIDENCE = 0.95
 Z_STAR = 1.96
 

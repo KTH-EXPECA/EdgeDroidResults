@@ -97,7 +97,8 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
         'client_send': [],
         'server_recv': [],
         'server_send': [],
-        'client_recv': []
+        'client_recv': [],
+        'state_index': []
     }
 
     if use_tcpdump:
@@ -113,8 +114,8 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
         feedback = frame['feedback']
         client_recv = frame['recv']
 
-        # if client_send < start_cutoff or client_recv > end_cutoff:
-        #     continue
+        #if client_send < start_cutoff or client_recv > end_cutoff:
+        #    continue
 
         if use_tcpdump and server_in and server_out:
             try:
@@ -151,6 +152,11 @@ def _parse_client_stats_for_run(client_idx, parser, server_offset,
         n_data['server_recv'].append(server_recv)
         n_data['server_send'].append(server_send)
         n_data['client_recv'].append(client_recv)
+
+        try:
+            n_data['state_index'].append(frame['state_index'])
+        except KeyError:
+            n_data['state_index'].append(-1)
 
         # raise e
 

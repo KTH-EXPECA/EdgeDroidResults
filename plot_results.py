@@ -24,6 +24,12 @@ NO_FEEDBACK_BIN_RANGE = (10, 300)
 # HIST_FEEDBACK_YRANGE = (0, 0.025)
 # HIST_NO_FEEDBACK_YRANGE = (0, 0.12)
 
+def set_box_color(bp, color):
+    plt.setp(bp['boxes'], color=color)
+    plt.setp(bp['whiskers'], color=color)
+    plt.setp(bp['caps'], color=color)
+    plt.setp(bp['medians'], color=color)
+
 
 def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
               y_range: Tuple[float, float],
@@ -52,13 +58,46 @@ def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
                     color=color)
 
 
-def plot_time_box(experiments: Dict, feedback: bool) -> None:
-    def set_box_color(bp, color):
-        plt.setp(bp['boxes'], color=color)
-        plt.setp(bp['whiskers'], color=color)
-        plt.setp(bp['caps'], color=color)
-        plt.setp(bp['medians'], color=color)
+def plot_time_taskstep(experiment: str) -> None:
+    # get all frame data
+    root_dir = os.getcwd()
+    os.chdir(root_dir + '/' + experiment)
+    data = pd.read_csv('total_frame_stats.csv')
+    run_data = pd.read_csv('total_run_stats.csv')
+    os.chdir(root_dir)
 
+    data = calculate_derived_metrics(data, True)
+    data = filter_runs(data, run_data)
+
+    # separate into steps
+    states = list(range(-1, data['state_index'].max() + 1, 1))
+
+    rtts = [[p + u + d for p, u, d in zip(
+        data.loc[data['state_index'] == state]['processing'],
+        data.loc[data['state_index'] == state]['uplink'],
+        data.loc[data['state_index'] == state]['downlink']
+    )] for state in states]
+
+    fig, ax = plt.subplots()
+    bp = ax.boxplot(rtts, positions=states)
+
+    def _state2tick(idx):
+        if idx < 0:
+            return 'Error'
+        elif idx == 0:
+            return 'Start'
+        elif idx == max(states):
+            return '{} to End'.format(idx - 1)
+        else:
+            return '{} to {}'.format(idx - 1, idx)
+
+    ticks = list(map(_state2tick, states))
+    ax.set_xticklabels(ticks)
+
+    plt.show()
+
+
+def plot_time_box(experiments: Dict, feedback: bool) -> None:
     root_dir = os.getcwd()
     # results = {}
     ticks = []
@@ -564,8 +603,9 @@ if __name__ == '__main__':
 
         # plot_avg_times_frames(experiments, feedback=True)
         # plot_avg_times_frames(experiments, feedback=False)
-        plot_time_box(experiments, feedback=True)
-        plot_time_box(experiments, feedback=False)
+        # plot_time_box(experiments, feedback=True)
+        # plot_time_box(experiments, feedback=False)
+        plot_time_taskstep('1Client_100Runs_TaskStep')
         # plot_time_dist(experiments, feedback=True)
         # plot_time_dist(experiments, feedback=False)
 
