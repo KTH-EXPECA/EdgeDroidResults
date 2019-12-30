@@ -4,18 +4,18 @@ from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import pylab
+from matplotlib import pylab, gridspec
 
 from util import *
 
 # n_runs = 25
 
 PLOT_DIM = (4.5, 3)
-SEPARATE_LEGEND = True
+SEPARATE_LEGEND = False
 PLOT_TITLES = False
 # PLOT_DIM = (8, 6)
-FEEDBACK_TIME_RANGE = (-200, 500)
-NO_FEEDBACK_TIME_RANGE = (-40, 100)
+FEEDBACK_TIME_RANGE = (-10, 600)
+NO_FEEDBACK_TIME_RANGE = (-2, 100)
 
 FEEDBACK_BIN_RANGE = (200, 1200)
 NO_FEEDBACK_BIN_RANGE = (10, 300)
@@ -58,6 +58,90 @@ def autolabel(ax: plt.Axes, rects: List[plt.Rectangle],
                     color=color)
 
 
+def plot_box_fb_vs_nfb(experiments: Dict) -> None:
+    root_dir = os.getcwd()
+    ticks = []
+    rtts_feedback = []
+    rtts_nofeedback = []
+
+    for exp_name, exp_dir in experiments.items():
+        os.chdir(root_dir + '/' + exp_dir)
+        data = pd.read_csv('total_frame_stats.csv')
+        run_data = pd.read_csv('total_run_stats.csv')
+        os.chdir(root_dir)
+
+        data = filter_runs(data, run_data)
+        data_fb = calculate_derived_metrics(data, feedback=True)
+        data_nofb = calculate_derived_metrics(data, feedback=False)
+
+        rtt_fb = data_fb['client_recv'] - data_fb['client_send']
+        rtt_nofb = data_nofb['client_recv'] - data_nofb['client_send']
+
+        rtts_feedback.append(rtt_fb)
+        rtts_nofeedback.append(rtt_nofb)
+
+        ticks.append(exp_name)
+
+    fig, ax = plt.subplots()
+    num_exps = len(ticks)
+    bp_nofb = ax.boxplot(rtts_nofeedback,
+                         positions=np.array(range(num_exps)) * 2.0 - 0.2,
+                         sym='', widths=0.4)
+    bp_fb = ax.boxplot(rtts_feedback,
+                       positions=np.array(range(num_exps)) * 2.0 + 0.2,
+                       sym='', widths=0.4)
+
+    # colors here
+    fb_color = 'C0'
+    nofb_color = 'C1'
+
+    set_box_color(bp_fb, fb_color)
+    set_box_color(bp_nofb, nofb_color)
+
+    # legend
+    p2 = ax.plot([], c=nofb_color, label='RTT - No Transition', marker='s',
+                 linestyle='',
+                 markersize=10)
+    p1 = ax.plot([], c=fb_color, label='RTT - State Transition', marker='s',
+                 linestyle='',
+                 markersize=10)
+
+    ax.legend()
+
+    # if SEPARATE_LEGEND:
+    #     dim_x, dim_y = PLOT_DIM
+    #     figlegend = pylab.figure(figsize=(dim_x * 2.0, .3))
+    #     plots = (*p1, *p2, *p3)
+    #     figlegend.legend(plots,
+    #                      ('Uplink Time', 'Processing Time', 'Downlink Time'),
+    #                      loc='center',
+    #                      mode='expand',
+    #                      ncol=3)
+    #     figlegend.tight_layout()
+    #     figlegend.savefig('times_box_legend.pdf', transparent=True,
+    #                       bbox_inches='tight', pad_inches=0)
+    #     figlegend.show()
+    # else:
+    #     ax.legend()
+
+    ax.set_xticks(range(0, len(ticks) * 2, 2))
+    ax.set_xticklabels(ticks)
+    ax.set_xlim(-1, (len(ticks) * 2) - 1)
+    ax.tick_params(labeltop=False,
+                   labelright=True,
+                   bottom=True,
+                   left=True,
+                   right=True)
+    ax.set_ylabel('Time [ms]')
+    ax.grid(True, which='major', axis='y', linestyle='--', alpha=0.8)
+
+    fig.set_size_inches(*PLOT_DIM)
+    plt.tight_layout()
+    fig.savefig('rtt_fb_vs_nofb.pdf', bbox_inches='tight')
+
+    plt.show()
+
+
 def plot_time_taskstep(experiment: str) -> None:
     # get all frame data
     root_dir = os.getcwd()
@@ -78,8 +162,47 @@ def plot_time_taskstep(experiment: str) -> None:
         data.loc[data['state_index'] == state]['downlink']
     )] for state in states]
 
-    fig, ax = plt.subplots()
-    bp = ax.boxplot(rtts, positions=states)
+    # fig, (ax_top, ax_bot) = plt.subplots(2, 1, sharex=True)
+    fig = plt.figure()
+    gs = gridspec.GridSpec(2, 1, height_ratios=[4, 1])
+    ax_top = plt.subplot(gs[0])
+    ax_bot = plt.subplot(gs[1])
+
+    color = 'C0'
+    bp_top = ax_top.boxplot(rtts, positions=states, showfliers=False)
+    bp_bot = ax_bot.boxplot(rtts, positions=states, showfliers=False)
+
+    p = ax_bot.plot([], c=color,
+                    label='RTT',
+                    marker='s',
+                    linestyle='',
+                    markersize=10)
+    set_box_color(bp_top, color)
+    set_box_color(bp_bot, color)
+
+    # set zoom
+    ax_top.set_ylim(200, 350)
+    ax_bot.set_ylim(0, 50)
+
+    # hide spines
+    ax_top.spines['bottom'].set_visible(False)
+    ax_bot.spines['top'].set_visible(False)
+    ax_top.tick_params(labeltop=False,
+                       labelbottom=False,
+                       labelright=True,
+                       top=False,
+                       bottom=False,
+                       left=True,
+                       right=True)
+    ax_bot.tick_params(labeltop=False,
+                       labelbottom=True,
+                       labelright=True,
+                       top=False,
+                       bottom=True,
+                       left=True,
+                       right=True)
+
+    ax_bot.legend(loc='lower right')
 
     def _state2tick(idx):
         if idx < 0:
@@ -92,7 +215,30 @@ def plot_time_taskstep(experiment: str) -> None:
             return '{} to {}'.format(idx - 1, idx)
 
     ticks = list(map(_state2tick, states))
-    ax.set_xticklabels(ticks)
+    ax_bot.set_xticklabels(ticks, rotation=45, ha='right')
+
+    ax_bot.tick_params(labeltop=False, labelright=True)
+    ax_top.set_ylabel('Time [ms]')
+    ax_top.grid(True, which='major', axis='y', linestyle='--', alpha=0.8)
+    ax_bot.grid(True, which='major', axis='y', linestyle='--', alpha=0.8)
+
+    # add diagonal lines for break in Y axis
+    d = .02  # how big to make the diagonal lines in axes coordinates
+    # arguments to pass to plot, just so we don't keep repeating them
+    kwargs = dict(transform=ax_top.transAxes, color='k', clip_on=False)
+    ax_top.plot((-d, +d), (-d, +d), **kwargs)  # top-left diagonal
+    ax_top.plot((1 - d, 1 + d), (-d, +d), **kwargs)  # top-right diagonal
+
+    kwargs.update(transform=ax_bot.transAxes)  # switch to the bottom axes
+    ax_bot.plot((-d, +d), (1 - (3 * d), 1 + (3 * d)), **kwargs)  # bottom-left
+    # diagonal
+    ax_bot.plot((1 - d, 1 + d), (1 - (3 * d), 1 + (3 * d)),
+                **kwargs)  # bottom-right
+    # diagonal
+
+    fig.set_size_inches(*PLOT_DIM)
+    plt.tight_layout()
+    fig.savefig('times_box_taskstep.pdf', bbox_inches='tight')
 
     plt.show()
 
@@ -138,11 +284,11 @@ def plot_time_box(experiments: Dict, feedback: bool) -> None:
     set_box_color(bp_down, 'C2')
 
     # legend
-    p1 = ax.plot([], c='C0', label='Uplink', marker='s', linestyle='',
+    p1 = ax.plot([], c='C0', label='Uplink Time', marker='s', linestyle='',
                  markersize=10)
-    p2 = ax.plot([], c='C1', label='Processing', marker='s', linestyle='',
+    p2 = ax.plot([], c='C1', label='Processing Time', marker='s', linestyle='',
                  markersize=10)
-    p3 = ax.plot([], c='C2', label='Downlink', marker='s', linestyle='',
+    p3 = ax.plot([], c='C2', label='Downlink Time', marker='s', linestyle='',
                  markersize=10)
 
     if SEPARATE_LEGEND:
@@ -150,7 +296,7 @@ def plot_time_box(experiments: Dict, feedback: bool) -> None:
         figlegend = pylab.figure(figsize=(dim_x * 2.0, .3))
         plots = (*p1, *p2, *p3)
         figlegend.legend(plots,
-                         ('Uplink', 'Processing', 'Downlink'),
+                         ('Uplink Time', 'Processing Time', 'Downlink Time'),
                          loc='center',
                          mode='expand',
                          ncol=3)
@@ -164,8 +310,16 @@ def plot_time_box(experiments: Dict, feedback: bool) -> None:
     ax.set_xticks(range(0, len(ticks) * 3, 3))
     ax.set_xticklabels(ticks)
     ax.set_xlim(-1, (len(ticks) * 3) - 2)
-    ax.tick_params(labeltop=False, labelright=True)
+    ax.tick_params(labeltop=False,
+                   labelright=True,
+                   bottom=True,
+                   left=True,
+                   right=True)
     ax.set_ylabel('Time [ms]')
+    if feedback:
+        ax.set_ylim(top=FEEDBACK_TIME_RANGE[1])
+    else:
+        ax.set_ylim(top=NO_FEEDBACK_TIME_RANGE[1])
     ax.grid(True, which='major', axis='y', linestyle='--', alpha=0.8)
 
     fig.set_size_inches(*PLOT_DIM)
@@ -567,7 +721,7 @@ def print_successful_runs(experiments):
 
 
 if __name__ == '__main__':
-    with plt.style.context('seaborn-paper'):
+    with plt.style.context('tableau-colorblind10'):
         plt.rcParams['font.size'] = 10  # font size
         plt.rcParams['xtick.labelsize'] = 10
         plt.rcParams['ytick.labelsize'] = 10
@@ -603,9 +757,10 @@ if __name__ == '__main__':
 
         # plot_avg_times_frames(experiments, feedback=True)
         # plot_avg_times_frames(experiments, feedback=False)
-        # plot_time_box(experiments, feedback=True)
+        plot_time_box(experiments, feedback=True)
         # plot_time_box(experiments, feedback=False)
         plot_time_taskstep('1Client_100Runs_TaskStep')
+        plot_box_fb_vs_nfb(experiments)
         # plot_time_dist(experiments, feedback=True)
         # plot_time_dist(experiments, feedback=False)
 
